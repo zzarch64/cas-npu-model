@@ -1,0 +1,4 @@
+build/
+*.so
+cas_npu/*.so
+cas_npu/__pycache__
