@@ -2,6 +2,7 @@
 // 使用CPU模拟NPU设备的行为
 
 #include "../cas_npu_runtime.h"
+#include "../cas_npu_debug.h"
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
@@ -159,6 +160,8 @@ CasNpuError casNpuAddTensor(
         return CAS_NPU_ERROR_INVALID_VALUE;
     }
     
+    CAS_NPU_DEBUG_RUNTIME("casNpuAddTensor", " elements=%zu alpha=%.2f", num_elements, alpha);
+    
     // 模拟NPU加法: output = input1 + alpha * input2
     for (size_t i = 0; i < num_elements; ++i) {
         output[i] = input1[i] + alpha * input2[i];
@@ -185,6 +188,8 @@ CasNpuError casNpuMatMul(
     if (M <= 0 || K <= 0 || N <= 0) {
         return CAS_NPU_ERROR_INVALID_VALUE;
     }
+    
+    CAS_NPU_DEBUG_RUNTIME("casNpuMatMul", " M=%ld K=%ld N=%ld FLOPs=%ld", M, K, N, 2*M*K*N);
     
     // 初始化输出为0
     for (int64_t i = 0; i < M * N; ++i) {
@@ -223,15 +228,26 @@ CasNpuError casNpuBatchMatMul(
         return CAS_NPU_ERROR_INVALID_VALUE;
     }
     
+    CAS_NPU_DEBUG_RUNTIME("casNpuBatchMatMul", " B=%ld M=%ld K=%ld N=%ld", B, M, K, N);
+    
     // 对每个batch执行矩阵乘法
     for (int64_t b = 0; b < B; ++b) {
         const float* batch_input1 = input1 + b * M * K;
         const float* batch_input2 = input2 + b * K * N;
         float* batch_output = output + b * M * N;
         
-        auto err = casNpuMatMul(batch_output, batch_input1, batch_input2, M, K, N);
-        if (err != CAS_NPU_SUCCESS) {
-            return err;
+        // 直接计算,不递归调用以避免重复debug输出
+        for (int64_t i = 0; i < M * N; ++i) {
+            batch_output[i] = 0.0f;
+        }
+        for (int64_t i = 0; i < M; ++i) {
+            for (int64_t j = 0; j < N; ++j) {
+                float sum = 0.0f;
+                for (int64_t k = 0; k < K; ++k) {
+                    sum += batch_input1[i * K + k] * batch_input2[k * N + j];
+                }
+                batch_output[i * N + j] = sum;
+            }
         }
     }
     
