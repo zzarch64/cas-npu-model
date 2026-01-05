@@ -100,30 +100,43 @@ def test_qwen_model():
     print("  (This may take a while on first run...)")
     
     try:
-        # 加载模型和tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        # 加载模型和tokenizer（优先使用本地缓存）
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, local_files_only=True)
         model = AutoModel.from_pretrained(
             model_name,
             trust_remote_code=True,
             torch_dtype=torch.float32,  # 使用float32，因为我们的实现只支持float
+            local_files_only=True,
         )
-        print("  ✓ Model loaded")
+        print("  ✓ Model loaded (from cache)")
     except Exception as e:
-        print(f"  ✗ Failed to load model: {e}")
-        print("  Trying alternative: Qwen/Qwen2-0.5B")
+        print(f"  ✗ Failed to load model from cache: {e}")
+        print("  Trying to download...")
         try:
-            model_name = "Qwen/Qwen2-0.5B"
             tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
             model = AutoModel.from_pretrained(
                 model_name,
                 trust_remote_code=True,
                 torch_dtype=torch.float32,
             )
-            print("  ✓ Model loaded (alternative)")
+            print("  ✓ Model loaded")
         except Exception as e2:
-            print(f"  ✗ Failed to load alternative model: {e2}")
-            print("  Skipping model test...")
-            return False
+            print(f"  ✗ Failed to load model: {e2}")
+            print("  Trying alternative: Qwen/Qwen2-0.5B")
+            try:
+                model_name = "Qwen/Qwen2-0.5B"
+                tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, local_files_only=True)
+                model = AutoModel.from_pretrained(
+                    model_name,
+                    trust_remote_code=True,
+                    torch_dtype=torch.float32,
+                    local_files_only=True,
+                )
+                print("  ✓ Model loaded (alternative, from cache)")
+            except Exception as e3:
+                print(f"  ✗ Failed to load alternative model: {e3}")
+                print("  Skipping model test...")
+                return False
     
     # 将模型移到设备
     print(f"\nMoving model to {device}...")
