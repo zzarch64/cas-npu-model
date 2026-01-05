@@ -33,26 +33,22 @@ void cas_npu_fallback(const c10::OperatorHandle& op, torch::jit::Stack* stack) {
 }
 
 // ============ 设备内存拷贝辅助函数 ============
+// 注：大部分 Fallback 已改用 cpu_fallback，仅保留 add.Tensor 广播情况需要的辅助函数
 
-// 将 CAS-NPU 设备上的 tensor 数据拷贝到 CPU tensor
-// 返回一个新的 CPU tensor，包含相同的数据
+// 将 CAS-NPU 设备上的 tensor 数据拷贝到 CPU tensor（仅用于 add.Tensor 广播）
 at::Tensor device_to_cpu(const at::Tensor& device_tensor) {
     TORCH_CHECK(device_tensor.device().is_privateuseone(),
                 "Expected tensor on CAS-NPU device");
     
-    // 在 CPU 上创建相同形状和类型的 tensor
     auto cpu_tensor = at::empty(
         device_tensor.sizes(),
         device_tensor.options().device(at::kCPU));
     
-    // 执行设备到 CPU 的数据拷贝
-    // 使用 runtime 提供的 memcpy 功能
     size_t nbytes = device_tensor.numel() * device_tensor.element_size();
     if (nbytes > 0) {
-        CAS_NPU_DEBUG_TRANSFER(debug::TransferDir::DEVICE_TO_HOST, nbytes, "");
         auto err = casNpuMemcpy(
-            cpu_tensor.data_ptr(),           // dst: CPU
-            device_tensor.data_ptr(),        // src: Device
+            cpu_tensor.data_ptr(),
+            device_tensor.data_ptr(),
             nbytes,
             CAS_NPU_MEMCPY_DEVICE_TO_HOST
         );
@@ -63,26 +59,20 @@ at::Tensor device_to_cpu(const at::Tensor& device_tensor) {
     return cpu_tensor;
 }
 
-// 将 CPU tensor 的数据拷贝到 CAS-NPU 设备上的 tensor
-// 返回一个新的设备 tensor，包含相同的数据
+// 将 CPU tensor 的数据拷贝到 CAS-NPU 设备上（仅用于 add.Tensor 广播）
 at::Tensor cpu_to_device(const at::Tensor& cpu_tensor, c10::Device target_device) {
-    TORCH_CHECK(cpu_tensor.is_cpu(),
-                "Expected tensor on CPU");
-    TORCH_CHECK(target_device.is_privateuseone(),
-                "Expected target device to be CAS-NPU");
+    TORCH_CHECK(cpu_tensor.is_cpu(), "Expected tensor on CPU");
+    TORCH_CHECK(target_device.is_privateuseone(), "Expected target device to be CAS-NPU");
     
-    // 在设备上创建相同形状和类型的 tensor
     auto device_tensor = at::empty(
         cpu_tensor.sizes(),
         cpu_tensor.options().device(target_device));
     
-    // 执行 CPU 到设备的数据拷贝
     size_t nbytes = cpu_tensor.numel() * cpu_tensor.element_size();
     if (nbytes > 0) {
-        CAS_NPU_DEBUG_TRANSFER(debug::TransferDir::HOST_TO_DEVICE, nbytes, "");
         auto err = casNpuMemcpy(
-            device_tensor.data_ptr(),        // dst: Device
-            cpu_tensor.data_ptr(),           // src: CPU
+            device_tensor.data_ptr(),
+            cpu_tensor.data_ptr(),
             nbytes,
             CAS_NPU_MEMCPY_HOST_TO_DEVICE
         );
@@ -91,27 +81,6 @@ at::Tensor cpu_to_device(const at::Tensor& cpu_tensor, c10::Device target_device
     }
     
     return device_tensor;
-}
-
-// 将数据从一个设备 tensor 拷贝到另一个设备 tensor（同设备）
-void device_to_device_copy(at::Tensor& dst, const at::Tensor& src) {
-    TORCH_CHECK(dst.device().is_privateuseone() && src.device().is_privateuseone(),
-                "Both tensors must be on CAS-NPU device");
-    TORCH_CHECK(dst.numel() == src.numel(),
-                "Tensor sizes must match for copy");
-    
-    size_t nbytes = src.numel() * src.element_size();
-    if (nbytes > 0) {
-        CAS_NPU_DEBUG_TRANSFER(debug::TransferDir::DEVICE_TO_DEVICE, nbytes, "");
-        auto err = casNpuMemcpy(
-            dst.data_ptr(),
-            src.data_ptr(),
-            nbytes,
-            CAS_NPU_MEMCPY_DEVICE_TO_DEVICE
-        );
-        TORCH_CHECK(err == CAS_NPU_SUCCESS,
-                    "Device to device memcpy failed: ", casNpuGetErrorString(err));
-    }
 }
 
 // ============ 核心操作实现 ============
@@ -257,104 +226,6 @@ at::Tensor cas_npu_bmm(
     return output;
 }
 
-// cat实现 - 张量连接
-at::Tensor cas_npu_cat(
-    const c10::IListRef<at::Tensor>& tensors,
-    int64_t dim) {
-    
-    CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "cat", " dim=%ld", dim);
-    
-    if (tensors.empty()) {
-        TORCH_CHECK(false, "cat expects at least one tensor");
-    }
-    
-    // 转换为vector并收集信息
-    std::vector<at::Tensor> tensors_vec;
-    tensors_vec.reserve(tensors.size());
-    at::Tensor reference_tensor;
-    int64_t max_ndim = 0;
-    c10::Device target_device(c10::DeviceType::PrivateUse1, 0);
-    
-    for (const auto& t : tensors) {
-        TORCH_CHECK(t.device().is_privateuseone(), 
-                    "Expected all tensors on CAS-NPU device");
-        TORCH_CHECK(t.scalar_type() == at::kFloat,
-                    "Only float tensors supported for now");
-        
-        tensors_vec.push_back(t);
-        
-        if (t.numel() > 0 && t.dim() > max_ndim) {
-            max_ndim = t.dim();
-            reference_tensor = t;
-            target_device = t.device();
-        }
-    }
-    
-    if (!reference_tensor.defined()) {
-        return tensors_vec[0].clone();
-    }
-    
-    // 规范化维度
-    int64_t ndim = reference_tensor.dim();
-    if (dim < 0) {
-        dim += ndim;
-    }
-    TORCH_CHECK(dim >= 0 && dim < ndim, "cat: dimension out of range");
-    
-    // 过滤出有效的tensor
-    std::vector<at::Tensor> valid_tensors;
-    auto ref_shape = reference_tensor.sizes();
-    
-    for (const auto& t : tensors_vec) {
-        if (t.numel() == 0 || t.dim() != ndim) continue;
-        
-        bool shape_match = true;
-        auto shape = t.sizes();
-        for (int64_t d = 0; d < ndim && shape_match; ++d) {
-            if (d != dim && shape[d] != ref_shape[d]) {
-                shape_match = false;
-            }
-        }
-        
-        if (shape_match && t.size(dim) > 0) {
-            valid_tensors.push_back(t);
-        }
-    }
-    
-    if (valid_tensors.empty()) {
-        std::vector<int64_t> output_shape(ref_shape.begin(), ref_shape.end());
-        output_shape[dim] = 0;
-        return at::empty(output_shape, reference_tensor.options());
-    }
-    
-    if (valid_tensors.size() == 1) {
-        return valid_tensors[0].clone();
-    }
-    
-    // 将所有 tensor copy 到 CPU
-    std::vector<at::Tensor> cpu_tensors;
-    cpu_tensors.reserve(valid_tensors.size());
-    for (const auto& t : valid_tensors) {
-        cpu_tensors.push_back(device_to_cpu(t));
-    }
-    
-    // 在 CPU 上执行 cat
-    at::Tensor cpu_result = at::cat(cpu_tensors, dim);
-    
-    // 将结果 copy 回设备
-    return cpu_to_device(cpu_result, target_device);
-}
-
-// cat.out实现
-at::Tensor& cas_npu_cat_out(
-    const c10::IListRef<at::Tensor>& tensors,
-    int64_t dim,
-    at::Tensor& out) {
-    
-    auto result = cas_npu_cat(tensors, dim);
-    device_to_device_copy(out, result);
-    return out;
-}
 
 // ============ 基础操作实现 ============
 
@@ -924,146 +795,7 @@ at::Tensor cas_npu_reshape(const at::Tensor& self, c10::SymIntArrayRef shape) {
     return cas_npu_reshape(contiguous_self, shape);
 }
 
-// ============ 数学操作实现 (使用显式 copy) ============
-
-// 通用的一元操作辅助函数：Device -> CPU -> 计算 -> Device
-template<typename CpuOp>
-at::Tensor unary_op_with_copy(const at::Tensor& self, CpuOp cpu_op, const char* op_name) {
-    TORCH_CHECK(self.device().is_privateuseone(), "Expected tensor on CAS-NPU device");
-    
-    CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, op_name, " [%ld]", self.numel());
-    
-    // 1. Device -> CPU
-    at::Tensor self_cpu = device_to_cpu(self);
-    
-    // 2. 在 CPU 上执行操作
-    at::Tensor result_cpu = cpu_op(self_cpu);
-    
-    // 3. CPU -> Device
-    return cpu_to_device(result_cpu, self.device());
-}
-
-// 通用的二元操作辅助函数
-template<typename CpuOp>
-at::Tensor binary_op_with_copy(const at::Tensor& self, const at::Tensor& other, CpuOp cpu_op, const char* op_name) {
-    bool self_on_device = self.device().is_privateuseone();
-    bool other_on_device = other.device().is_privateuseone();
-    TORCH_CHECK(self_on_device || other_on_device, "Expected at least one tensor on CAS-NPU device");
-    
-    c10::Device target_device = self_on_device ? self.device() : other.device();
-    
-    CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, op_name, " [%ld, %ld]", self.numel(), other.numel());
-    
-    // 将两个 tensor 都 copy 到 CPU（如果需要）
-    at::Tensor self_cpu = self_on_device ? device_to_cpu(self) : self;
-    at::Tensor other_cpu = other_on_device ? device_to_cpu(other) : other;
-    
-    // 在 CPU 上执行操作
-    at::Tensor result_cpu = cpu_op(self_cpu, other_cpu);
-    
-    // copy 回设备
-    return cpu_to_device(result_cpu, target_device);
-}
-
-// rsqrt实现
-at::Tensor cas_npu_rsqrt(const at::Tensor& self) {
-    return unary_op_with_copy(self, [](const at::Tensor& t) { return at::rsqrt(t); }, "rsqrt");
-}
-
-// sqrt实现
-at::Tensor cas_npu_sqrt(const at::Tensor& self) {
-    return unary_op_with_copy(self, [](const at::Tensor& t) { return at::sqrt(t); }, "sqrt");
-}
-
-// mul.Tensor实现
-at::Tensor cas_npu_mul_Tensor(const at::Tensor& self, const at::Tensor& other) {
-    return binary_op_with_copy(self, other, [](const at::Tensor& a, const at::Tensor& b) {
-        return at::mul(a, b);
-    }, "mul.Tensor");
-}
-
-// mul.Scalar实现
-at::Tensor cas_npu_mul_Scalar(const at::Tensor& self, const at::Scalar& other) {
-    return unary_op_with_copy(self, [&other](const at::Tensor& t) { return at::mul(t, other); }, "mul.Scalar");
-}
-
-// pow.Tensor_Scalar实现
-at::Tensor cas_npu_pow_Tensor_Scalar(const at::Tensor& self, const at::Scalar& exponent) {
-    return unary_op_with_copy(self, [&exponent](const at::Tensor& t) { return at::pow(t, exponent); }, "pow.Tensor_Scalar");
-}
-
-// mean.dim实现
-at::Tensor cas_npu_mean_dim(
-    const at::Tensor& self,
-    at::OptionalIntArrayRef dim,
-    bool keepdim,
-    std::optional<c10::ScalarType> dtype) {
-    
-    TORCH_CHECK(self.device().is_privateuseone(), "Expected tensor on CAS-NPU device");
-    
-    CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "mean.dim", " [%ld]", self.numel());
-    
-    at::Tensor self_cpu = device_to_cpu(self);
-    at::Tensor result_cpu = at::mean(self_cpu, dim, keepdim, dtype);
-    return cpu_to_device(result_cpu, self.device());
-}
-
-// silu实现
-at::Tensor cas_npu_silu(const at::Tensor& self) {
-    return unary_op_with_copy(self, [](const at::Tensor& t) { return at::silu(t); }, "silu");
-}
-
-// cos实现
-at::Tensor cas_npu_cos(const at::Tensor& self) {
-    return unary_op_with_copy(self, [](const at::Tensor& t) { return at::cos(t); }, "cos");
-}
-
-// sin实现
-at::Tensor cas_npu_sin(const at::Tensor& self) {
-    return unary_op_with_copy(self, [](const at::Tensor& t) { return at::sin(t); }, "sin");
-}
-
-// add.Scalar实现
-at::Tensor cas_npu_add_Scalar(const at::Tensor& self, const at::Scalar& other, const at::Scalar& alpha) {
-    return unary_op_with_copy(self, [&other, &alpha](const at::Tensor& t) {
-        return at::add(t, other, alpha);
-    }, "add.Scalar");
-}
-
-// sub.Tensor实现
-at::Tensor cas_npu_sub_Tensor(const at::Tensor& self, const at::Tensor& other, const at::Scalar& alpha) {
-    return binary_op_with_copy(self, other, [&alpha](const at::Tensor& a, const at::Tensor& b) {
-        return at::sub(a, b, alpha);
-    }, "sub.Tensor");
-}
-
-// div.Tensor实现
-at::Tensor cas_npu_div_Tensor(const at::Tensor& self, const at::Tensor& other) {
-    return binary_op_with_copy(self, other, [](const at::Tensor& a, const at::Tensor& b) {
-        return at::div(a, b);
-    }, "div.Tensor");
-}
-
-// neg实现
-at::Tensor cas_npu_neg(const at::Tensor& self) {
-    return unary_op_with_copy(self, [](const at::Tensor& t) { return at::neg(t); }, "neg");
-}
-
-// mul.out实现
-at::Tensor& cas_npu_mul_out(const at::Tensor& self, const at::Tensor& other, at::Tensor& out) {
-    auto result = cas_npu_mul_Tensor(self, other);
-    device_to_device_copy(out, result);
-    return out;
-}
-
-// mul.Scalar_out实现
-at::Tensor& cas_npu_mul_Scalar_out(const at::Tensor& self, const at::Scalar& other, at::Tensor& out) {
-    auto result = cas_npu_mul_Scalar(self, other);
-    device_to_device_copy(out, result);
-    return out;
-}
-
-// contiguous实现 - 返回内存连续的tensor
+// contiguous实现 - 返回内存连续的tensor（保留优化：已经contiguous时直接返回）
 at::Tensor cas_npu_contiguous(
     const at::Tensor& self,
     at::MemoryFormat memory_format) {
@@ -1084,47 +816,13 @@ at::Tensor cas_npu_contiguous(
     return cpu_to_device(contiguous_cpu, self.device());
 }
 
-// clone实现 - 创建tensor的副本
-at::Tensor cas_npu_clone(
-    const at::Tensor& self,
-    std::optional<at::MemoryFormat> memory_format) {
-    
-    TORCH_CHECK(self.device().is_privateuseone(), "Expected tensor on CAS-NPU device");
-    
-    CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "clone", " [%ld]", self.numel());
-    
-    // Device -> CPU -> clone -> Device
-    at::Tensor self_cpu = device_to_cpu(self);
-    at::Tensor cloned_cpu = self_cpu.clone(memory_format);
-    return cpu_to_device(cloned_cpu, self.device());
-}
-
 // ============ 操作注册 ============
 
 TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
-    // ========== 自定义实现的操作 ==========
+    // ========== NPU 原生实现的操作 ==========
     m.impl("add.Tensor", &cas_npu_add_Tensor);
     m.impl("mm", &cas_npu_mm);
     m.impl("bmm", &cas_npu_bmm);
-    m.impl("cat", &cas_npu_cat);
-    m.impl("cat.out", &cas_npu_cat_out);
-    
-    // 数学操作（使用显式 copy 模式）
-    m.impl("rsqrt", &cas_npu_rsqrt);
-    m.impl("sqrt", &cas_npu_sqrt);
-    m.impl("mul.Tensor", &cas_npu_mul_Tensor);
-    m.impl("mul.Scalar", &cas_npu_mul_Scalar);
-    m.impl("pow.Tensor_Scalar", &cas_npu_pow_Tensor_Scalar);
-    m.impl("mean.dim", &cas_npu_mean_dim);
-    m.impl("silu", &cas_npu_silu);
-    m.impl("cos", &cas_npu_cos);
-    m.impl("sin", &cas_npu_sin);
-    m.impl("add.Scalar", &cas_npu_add_Scalar);
-    m.impl("sub.Tensor", &cas_npu_sub_Tensor);
-    m.impl("div.Tensor", &cas_npu_div_Tensor);
-    m.impl("neg", &cas_npu_neg);
-    m.impl("mul.out", &cas_npu_mul_out);
-    m.impl("mul.Scalar_out", &cas_npu_mul_Scalar_out);
     
     // 基础tensor操作
     m.impl("empty.memory_format", &cas_npu_empty_memory_format);
@@ -1153,6 +851,25 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     
     // ========== 使用CPU Fallback的操作 ==========
     
+    // 数学操作 (通过 cpu_fallback 自动处理)
+    m.impl("rsqrt", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sqrt", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("mul.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("mul.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("pow.Tensor_Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("mean.dim", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("silu", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("cos", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sin", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("add.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sub.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("div.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("neg", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("mul.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("mul.Scalar_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("cat", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("cat.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    
     // Tensor工厂和操作
     m.impl("ones_like", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("zeros_like", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -1178,7 +895,7 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("argmin", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
     // Tensor操作
-    m.impl("clone", &cas_npu_clone);
+    m.impl("clone", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("contiguous", &cas_npu_contiguous);
     m.impl("index_select", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("embedding", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
