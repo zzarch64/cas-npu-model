@@ -105,12 +105,29 @@ CasNpuError casNpuFree(void* ptr) {
     return CAS_NPU_SUCCESS;
 }
 
-CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size) {
+// 带方向的内存拷贝（类似 cudaMemcpy）
+// 在 CPU 模拟器中，所有方向的拷贝都是简单的 memcpy
+// 实际硬件实现中，不同方向可能需要不同的 DMA 操作
+CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKind kind) {
     if ((dst == nullptr || src == nullptr) && size > 0) {
         return CAS_NPU_ERROR_INVALID_VALUE;
     }
+    
+    // 在 CPU 模拟器中，所有内存都在同一地址空间
+    // 所以无论 kind 是什么，都使用 memcpy
+    // 实际硬件中，Host->Device 和 Device->Host 可能需要 PCIe/DMA 传输
+    // Device->Device 可能需要片上内存拷贝
     if (size > 0) {
-        memcpy(dst, src, size);
+        switch (kind) {
+            case CAS_NPU_MEMCPY_HOST_TO_HOST:
+            case CAS_NPU_MEMCPY_HOST_TO_DEVICE:
+            case CAS_NPU_MEMCPY_DEVICE_TO_HOST:
+            case CAS_NPU_MEMCPY_DEVICE_TO_DEVICE:
+            case CAS_NPU_MEMCPY_DEFAULT:
+            default:
+                memcpy(dst, src, size);
+                break;
+        }
     }
     return CAS_NPU_SUCCESS;
 }

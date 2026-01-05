@@ -48,7 +48,8 @@ c10::DeleterFnPtr CasNpuAllocator::raw_deleter() const {
 }
 
 void CasNpuAllocator::copy_data(void* dest, const void* src, std::size_t count) const {
-    auto err = casNpuMemcpy(dest, src, count);
+    // 这里假设是设备到设备的拷贝（分配器内部使用）
+    auto err = casNpuMemcpy(dest, src, count, CAS_NPU_MEMCPY_DEVICE_TO_DEVICE);
     TORCH_CHECK(err == CAS_NPU_SUCCESS,
                 "Failed to copy ", count, " bytes on CAS-NPU device: ",
                 casNpuGetErrorString(err));

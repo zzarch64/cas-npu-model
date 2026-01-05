@@ -15,6 +15,15 @@ enum CasNpuError {
     CAS_NPU_ERROR_UNKNOWN = 999
 };
 
+// 内存拷贝方向（类似 cudaMemcpyKind）
+enum CasNpuMemcpyKind {
+    CAS_NPU_MEMCPY_HOST_TO_HOST = 0,      // CPU -> CPU
+    CAS_NPU_MEMCPY_HOST_TO_DEVICE = 1,    // CPU -> Device (Host to NPU)
+    CAS_NPU_MEMCPY_DEVICE_TO_HOST = 2,    // Device -> CPU (NPU to Host)
+    CAS_NPU_MEMCPY_DEVICE_TO_DEVICE = 3,  // Device -> Device (NPU to NPU)
+    CAS_NPU_MEMCPY_DEFAULT = 4            // 自动检测方向
+};
+
 // 设备数量（模拟1个NPU设备）
 constexpr int CAS_NPU_DEVICE_COUNT = 1;
 
@@ -28,7 +37,14 @@ CasNpuError casNpuGetDevice(int* device);
 // 内存管理
 CasNpuError casNpuMalloc(void** ptr, size_t size);
 CasNpuError casNpuFree(void* ptr);
-CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size);
+
+// 带方向的内存拷贝（类似 cudaMemcpy）
+// dst: 目标地址
+// src: 源地址
+// size: 拷贝字节数
+// kind: 拷贝方向
+CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKind kind);
+
 CasNpuError casNpuMemset(void* ptr, int value, size_t size);
 
 // 同步
