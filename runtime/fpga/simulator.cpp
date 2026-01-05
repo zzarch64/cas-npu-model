@@ -4,6 +4,7 @@
 #include "../cas_npu_runtime.h"
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 #include <unordered_map>
 #include <mutex>
 #include <vector>
@@ -288,6 +289,43 @@ CasNpuError casNpuCat(
             float* dst_row = dst + d * dim_stride;
             memcpy(dst_row, src_row, suffix_size * sizeof(float));
         }
+    }
+    
+    return CAS_NPU_SUCCESS;
+}
+
+// 量化操作实现: 将float32量化为int8
+CasNpuError casNpuQuantize(
+    int8_t* output,
+    const float* input,
+    size_t num_elements,
+    float scale,
+    int8_t zero_point) {
+    
+    if (output == nullptr || input == nullptr) {
+        return CAS_NPU_ERROR_INVALID_VALUE;
+    }
+    if (num_elements == 0) {
+        return CAS_NPU_SUCCESS;
+    }
+    if (scale <= 0.0f) {
+        return CAS_NPU_ERROR_INVALID_VALUE;
+    }
+    
+    // 量化公式: quantized = round(input / scale) + zero_point
+    // 然后clamp到int8范围 [-128, 127]
+    for (size_t i = 0; i < num_elements; ++i) {
+        float quantized_float = input[i] / scale + static_cast<float>(zero_point);
+        int quantized_int = static_cast<int>(std::round(quantized_float));
+        
+        // Clamp到int8范围
+        if (quantized_int > 127) {
+            quantized_int = 127;
+        } else if (quantized_int < -128) {
+            quantized_int = -128;
+        }
+        
+        output[i] = static_cast<int8_t>(quantized_int);
     }
     
     return CAS_NPU_SUCCESS;

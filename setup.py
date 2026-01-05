@@ -20,6 +20,8 @@ sources = [
     'backend/cas_npu_hooks.cpp',
     'backend/cas_npu_ops.cpp',
     'backend/cas_npu_module.cpp',
+    # 自定义算子示例
+    'backend/cas_npu_custom_ops_example.cpp',
     # Runtime 实现层（cmodel 或 fpga simulator）
     f'runtime/{impl_type}/simulator.cpp',
 ]

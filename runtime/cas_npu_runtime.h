@@ -84,6 +84,19 @@ CasNpuError casNpuCat(
     const int64_t* output_shape,
     int ndim);
 
+// 量化操作: 将float32 tensor量化为int8
+// input: 输入float32数据指针
+// output: 输出int8数据指针
+// num_elements: 元素数量
+// scale: 量化缩放因子
+// zero_point: 量化零点
+CasNpuError casNpuQuantize(
+    int8_t* output,
+    const float* input,
+    size_t num_elements,
+    float scale,
+    int8_t zero_point);
+
 // 获取错误描述
 const char* casNpuGetErrorString(CasNpuError error);
 
