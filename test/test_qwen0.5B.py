@@ -511,14 +511,14 @@ def test_lora_finetune():
             loss_value = loss.item()
             losses.append(loss_value)
             
+            # 添加到表格
+            status = "✓" if torch.isfinite(torch.tensor(loss_value)) else "✗"
+            training_rows.append([f"Step {step+1}", f"{loss_value:.6f}", f"shape={hidden_states.shape}", status])
+            
             # 清理中间变量以释放内存
             del outputs, hidden_states, loss
             if hasattr(torch.cas_npu, 'empty_cache'):
                 torch.cas_npu.empty_cache()
-            
-            # 添加到表格
-            status = "✓" if torch.isfinite(torch.tensor(loss_value)) else "✗"
-            training_rows.append([f"Step {step+1}", f"{loss_value:.6f}", f"shape={hidden_states.shape}", status])
         
         # 打印训练表格
         print("\nTraining Progress:")
