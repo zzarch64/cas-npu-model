@@ -121,8 +121,11 @@ at::Tensor cas_npu_add_Tensor(
     if (self_device.sizes() != other_device.sizes()) {
         // 需要广播，使用 CPU 实现
         CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "add.Tensor", " (broadcast)");
-        at::Tensor self_cpu = device_to_cpu(self_device);
-        at::Tensor other_cpu = device_to_cpu(other_device);
+        // 确保输入tensor是contiguous的，因为device_to_cpu要求contiguous
+        auto self_contig = self_device.is_contiguous() ? self_device : self_device.contiguous();
+        auto other_contig = other_device.is_contiguous() ? other_device : other_device.contiguous();
+        at::Tensor self_cpu = device_to_cpu(self_contig);
+        at::Tensor other_cpu = device_to_cpu(other_contig);
         
         // 在 CPU 上执行带广播的加法
         at::Tensor result_cpu = at::add(self_cpu, other_cpu, alpha);
@@ -134,18 +137,24 @@ at::Tensor cas_npu_add_Tensor(
     // 不需要广播，直接在设备上执行
     CAS_NPU_DEBUG_OP(debug::OpType::NPU_NATIVE, "add.Tensor", " [%ld]", self_device.numel());
     
-    auto output = at::empty(output_size, self_device.options());
+    // 重要：确保输入tensor是contiguous的！
+    // 当tensor是transpose、slice等操作后的结果时，可能是非contiguous的
+    // 直接使用data_ptr()会导致读取错误的数据（stride信息被忽略）
+    auto self_contig = self_device.is_contiguous() ? self_device : self_device.contiguous();
+    auto other_contig = other_device.is_contiguous() ? other_device : other_device.contiguous();
+    
+    auto output = at::empty(output_size, self_contig.options());
     
     float* out_data = output.data_ptr<float>();
-    const float* self_data = self_device.data_ptr<float>();
-    const float* other_data = other_device.data_ptr<float>();
+    const float* self_data = self_contig.data_ptr<float>();
+    const float* other_data = other_contig.data_ptr<float>();
     
     // 调用CAS-NPU runtime执行加法
     auto err = casNpuAddTensor(
         out_data,
         self_data,
         other_data,
-        self_device.numel(),
+        self_contig.numel(),
         alpha.toFloat()
     );
     
@@ -323,22 +332,28 @@ at::Tensor cas_npu_copy_from(
         // dst非contiguous的情况比较复杂，需要通过CPU处理
         CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (dst non-contiguous)");
         
-        // 对于CPU源，通过CPU临时tensor处理
+        // 对于CPU源，使用PyTorch的copy_操作来处理非contiguous dst
         if (self.is_cpu()) {
-            // 创建CPU临时tensor，复制数据，然后逐元素写入dst
-            // 这种情况比较少见，暂时使用fallback
-            at::native::cpu_fallback(
-                c10::Dispatcher::singleton().findSchemaOrThrow("aten::_copy_from", ""),
-                nullptr);
-            return dst;
+            // 如果self和dst都在CPU上，使用PyTorch的copy_操作
+            // copy_会自动处理stride信息
+            if (dst.is_cpu()) {
+                dst.copy_(self);
+                return dst;
+            }
+            // 如果dst在device上，先复制到CPU的contiguous tensor，再复制到device
+            // 但这种情况应该很少见，因为通常dst应该已经是contiguous的
+            // 为了安全，我们先将dst变成contiguous
+            auto dst_contig = dst.contiguous();
+            return cas_npu_copy_from(self, dst_contig, non_blocking);
         }
         
         // 对于Device源，先复制到CPU，然后通过CPU处理
-        auto dst_cpu = at::empty(dst.sizes(), dst.options().device(at::kCPU));
+        // 策略：先将self复制到CPU的contiguous tensor，然后使用CPU的copy_操作
+        auto self_cpu = at::empty(self.sizes(), self.options().device(at::kCPU));
         size_t nbytes = self.numel() * self.element_size();
         if (nbytes > 0) {
             auto err = casNpuMemcpy(
-                dst_cpu.data_ptr(),
+                self_cpu.data_ptr(),
                 self.data_ptr(),
                 nbytes,
                 CAS_NPU_MEMCPY_DEVICE_TO_HOST
@@ -347,11 +362,16 @@ at::Tensor cas_npu_copy_from(
                         "Device to CPU copy failed: ", casNpuGetErrorString(err));
         }
         
-        // 在CPU上处理非contiguous dst的情况（这部分由PyTorch处理）
-        // 实际上，如果dst是device tensor但非contiguous，我们需要更复杂的处理
-        // 暂时通过contiguous化dst来处理
+        // 如果dst在CPU上，使用CPU的copy_操作
+        if (dst.is_cpu()) {
+            dst.copy_(self_cpu);
+            return dst;
+        }
+        
+        // 如果dst在device上但非contiguous，先将dst变成contiguous
+        // 这种情况应该很少见，但为了安全我们处理它
         auto dst_contig = dst.contiguous();
-        return cas_npu_copy_from(self, dst_contig, non_blocking);
+        return cas_npu_copy_from(self_cpu, dst_contig, non_blocking);
     }
     
     size_t nbytes = self.numel() * self.element_size();
@@ -464,7 +484,9 @@ at::Scalar cas_npu_local_scalar_dense(const at::Tensor& self) {
     TORCH_CHECK(self.numel() == 1, "Expected single element tensor");
     
     // 将单个元素从设备 copy 到 CPU
-    at::Tensor cpu_tensor = device_to_cpu(self);
+    // 确保tensor是contiguous的，因为device_to_cpu要求contiguous
+    auto self_contig = self.is_contiguous() ? self : self.contiguous();
+    at::Tensor cpu_tensor = device_to_cpu(self_contig);
     return at::native::_local_scalar_dense_cpu(cpu_tensor);
 }
 
