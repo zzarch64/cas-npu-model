@@ -59,12 +59,17 @@ CasNpuError casNpuMalloc(void** ptr, size_t size) {
     
     // 使用aligned_alloc确保内存对齐（模拟NPU内存对齐要求）
     void* data = nullptr;
+    size_t actual_size = size;  // 实际分配的大小
 #ifdef _WIN32
     data = _aligned_malloc(size, 64);
+    // Windows上_aligned_malloc分配的大小就是请求的size
+    actual_size = size;
 #else
     // 确保size是64的倍数以满足aligned_alloc要求
     size_t aligned_size = ((size + 63) / 64) * 64;
     data = aligned_alloc(64, aligned_size);
+    // Linux上aligned_alloc分配的大小是aligned_size（可能大于size）
+    actual_size = aligned_size;
 #endif
     
     if (data == nullptr) {
@@ -73,12 +78,14 @@ CasNpuError casNpuMalloc(void** ptr, size_t size) {
     
     // 初始化内存为0，避免未初始化内存包含NaN/Inf值
     // 注意：虽然PyTorch的empty操作不保证初始化，但为了数值稳定性，我们初始化内存
-    memset(data, 0, size);
+    // 重要：必须初始化整个实际分配的大小，而不仅仅是请求的size
+    // 未初始化的尾部内存可能包含垃圾数据，导致NaN
+    memset(data, 0, actual_size);
     
-    // 跟踪分配
+    // 跟踪分配（记录实际分配的大小）
     {
         std::lock_guard<std::mutex> lock(allocation_mutex);
-        allocations[data] = size;
+        allocations[data] = actual_size;
         total_allocations++;
     }
     

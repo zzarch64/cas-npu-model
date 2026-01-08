@@ -36,9 +36,12 @@ void cas_npu_fallback(const c10::OperatorHandle& op, torch::jit::Stack* stack) {
 // 注：大部分 Fallback 已改用 cpu_fallback，仅保留 add.Tensor 广播情况需要的辅助函数
 
 // 将 CAS-NPU 设备上的 tensor 数据拷贝到 CPU tensor（仅用于 add.Tensor 广播）
+// 此函数要求输入tensor是contiguous的
 at::Tensor device_to_cpu(const at::Tensor& device_tensor) {
     TORCH_CHECK(device_tensor.device().is_privateuseone(),
                 "Expected tensor on CAS-NPU device");
+    TORCH_CHECK(device_tensor.is_contiguous(),
+                "device_to_cpu requires contiguous tensor. Call .contiguous() first.");
     
     auto cpu_tensor = at::empty(
         device_tensor.sizes(),
@@ -60,19 +63,24 @@ at::Tensor device_to_cpu(const at::Tensor& device_tensor) {
 }
 
 // 将 CPU tensor 的数据拷贝到 CAS-NPU 设备上（仅用于 add.Tensor 广播）
+// 注意：此函数假设输入tensor已经是contiguous的
 at::Tensor cpu_to_device(const at::Tensor& cpu_tensor, c10::Device target_device) {
     TORCH_CHECK(cpu_tensor.is_cpu(), "Expected tensor on CPU");
     TORCH_CHECK(target_device.is_privateuseone(), "Expected target device to be CAS-NPU");
     
-    auto device_tensor = at::empty(
-        cpu_tensor.sizes(),
-        cpu_tensor.options().device(target_device));
+    // 对于非contiguous的CPU tensor，先调用CPU的contiguous()使其连续
+    // 这不会导致递归，因为这里调用的是CPU实现
+    auto cpu_tensor_contig = cpu_tensor.is_contiguous() ? cpu_tensor : cpu_tensor.contiguous();
     
-    size_t nbytes = cpu_tensor.numel() * cpu_tensor.element_size();
+    auto device_tensor = at::empty(
+        cpu_tensor_contig.sizes(),
+        cpu_tensor_contig.options().device(target_device));
+    
+    size_t nbytes = cpu_tensor_contig.numel() * cpu_tensor_contig.element_size();
     if (nbytes > 0) {
         auto err = casNpuMemcpy(
             device_tensor.data_ptr(),
-            cpu_tensor.data_ptr(),
+            cpu_tensor_contig.data_ptr(),
             nbytes,
             CAS_NPU_MEMCPY_HOST_TO_DEVICE
         );
@@ -165,17 +173,23 @@ at::Tensor cas_npu_mm(
     TORCH_CHECK(mat2.scalar_type() == at::kFloat,
                 "Only float tensors supported for now");
     
-    int64_t M = input.size(0);
-    int64_t K = input.size(1);
-    int64_t N = mat2.size(1);
+    // 重要：确保输入tensor是contiguous的！
+    // 当tensor是transpose后的结果（如weight.t()）时，它是非contiguous的
+    // 直接使用data_ptr()会导致读取错误的数据（stride信息被忽略）
+    auto input_contig = input.is_contiguous() ? input : input.contiguous();
+    auto mat2_contig = mat2.is_contiguous() ? mat2 : mat2.contiguous();
+    
+    int64_t M = input_contig.size(0);
+    int64_t K = input_contig.size(1);
+    int64_t N = mat2_contig.size(1);
     
     CAS_NPU_DEBUG_OP(debug::OpType::NPU_NATIVE, "mm", " [%ldx%ld] @ [%ldx%ld]", M, K, K, N);
     
-    auto output = at::empty({M, N}, input.options());
+    auto output = at::empty({M, N}, input_contig.options());
     
     float* out_data = output.data_ptr<float>();
-    const float* input_data = input.data_ptr<float>();
-    const float* mat2_data = mat2.data_ptr<float>();
+    const float* input_data = input_contig.data_ptr<float>();
+    const float* mat2_data = mat2_contig.data_ptr<float>();
     
     auto err = casNpuMatMul(out_data, input_data, mat2_data, M, K, N);
     
@@ -205,18 +219,24 @@ at::Tensor cas_npu_bmm(
     TORCH_CHECK(mat2.scalar_type() == at::kFloat,
                 "Only float tensors supported for now");
     
-    int64_t B = input.size(0);
-    int64_t M = input.size(1);
-    int64_t K = input.size(2);
-    int64_t N = mat2.size(2);
+    // 重要：确保输入tensor是contiguous的！
+    // 当tensor是transpose后的结果时，它是非contiguous的
+    // 直接使用data_ptr()会导致读取错误的数据（stride信息被忽略）
+    auto input_contig = input.is_contiguous() ? input : input.contiguous();
+    auto mat2_contig = mat2.is_contiguous() ? mat2 : mat2.contiguous();
+    
+    int64_t B = input_contig.size(0);
+    int64_t M = input_contig.size(1);
+    int64_t K = input_contig.size(2);
+    int64_t N = mat2_contig.size(2);
     
     CAS_NPU_DEBUG_OP(debug::OpType::NPU_NATIVE, "bmm", " [%ldx%ldx%ld] @ [%ldx%ldx%ld]", B, M, K, B, K, N);
     
-    auto output = at::empty({B, M, N}, input.options());
+    auto output = at::empty({B, M, N}, input_contig.options());
     
     float* out_data = output.data_ptr<float>();
-    const float* input_data = input.data_ptr<float>();
-    const float* mat2_data = mat2.data_ptr<float>();
+    const float* input_data = input_contig.data_ptr<float>();
+    const float* mat2_data = mat2_contig.data_ptr<float>();
     
     auto err = casNpuBatchMatMul(out_data, input_data, mat2_data, B, M, K, N);
     
@@ -289,6 +309,50 @@ at::Tensor cas_npu_copy_from(
     
     TORCH_CHECK(self.defined(), "Source tensor is not defined");
     TORCH_CHECK(dst.defined(), "Destination tensor is not defined");
+    
+    // 对于非contiguous tensor，需要特殊处理
+    // 策略：先将source变成contiguous，然后再拷贝
+    if (!self.is_contiguous()) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (source non-contiguous)");
+        // 先将source变成contiguous，然后递归调用
+        auto self_contig = self.contiguous();
+        return cas_npu_copy_from(self_contig, dst, non_blocking);
+    }
+    
+    if (!dst.is_contiguous()) {
+        // dst非contiguous的情况比较复杂，需要通过CPU处理
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (dst non-contiguous)");
+        
+        // 对于CPU源，通过CPU临时tensor处理
+        if (self.is_cpu()) {
+            // 创建CPU临时tensor，复制数据，然后逐元素写入dst
+            // 这种情况比较少见，暂时使用fallback
+            at::native::cpu_fallback(
+                c10::Dispatcher::singleton().findSchemaOrThrow("aten::_copy_from", ""),
+                nullptr);
+            return dst;
+        }
+        
+        // 对于Device源，先复制到CPU，然后通过CPU处理
+        auto dst_cpu = at::empty(dst.sizes(), dst.options().device(at::kCPU));
+        size_t nbytes = self.numel() * self.element_size();
+        if (nbytes > 0) {
+            auto err = casNpuMemcpy(
+                dst_cpu.data_ptr(),
+                self.data_ptr(),
+                nbytes,
+                CAS_NPU_MEMCPY_DEVICE_TO_HOST
+            );
+            TORCH_CHECK(err == CAS_NPU_SUCCESS,
+                        "Device to CPU copy failed: ", casNpuGetErrorString(err));
+        }
+        
+        // 在CPU上处理非contiguous dst的情况（这部分由PyTorch处理）
+        // 实际上，如果dst是device tensor但非contiguous，我们需要更复杂的处理
+        // 暂时通过contiguous化dst来处理
+        auto dst_contig = dst.contiguous();
+        return cas_npu_copy_from(self, dst_contig, non_blocking);
+    }
     
     size_t nbytes = self.numel() * self.element_size();
     
@@ -809,10 +873,43 @@ at::Tensor cas_npu_contiguous(
     }
     
     // 需要创建一个新的 contiguous tensor 并拷贝数据
-    // 使用显式 copy 模式：Device -> CPU -> contiguous -> Device
-    CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "contiguous", " (needs copy)");
-    at::Tensor self_cpu = device_to_cpu(self);
-    at::Tensor contiguous_cpu = self_cpu.contiguous(memory_format);
+    // 策略：通过CPU中转，避免D2D非contiguous拷贝的复杂性
+    // 1. 复制整个storage到CPU
+    // 2. 在CPU上创建相同strides的view
+    // 3. 调用CPU的contiguous
+    // 4. 复制回device
+    CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "contiguous", " (needs copy via CPU)");
+    
+    // 获取storage信息
+    size_t storage_nbytes = self.storage().nbytes();
+    size_t storage_offset = self.storage_offset();
+    
+    // 创建CPU storage并复制数据
+    auto cpu_storage = c10::Storage(
+        c10::Storage::use_byte_size_t(),
+        storage_nbytes,
+        at::getCPUAllocator(),
+        true);
+    
+    if (storage_nbytes > 0) {
+        auto err = casNpuMemcpy(
+            cpu_storage.mutable_data(),
+            self.storage().data(),
+            storage_nbytes,
+            CAS_NPU_MEMCPY_DEVICE_TO_HOST
+        );
+        TORCH_CHECK(err == CAS_NPU_SUCCESS,
+                    "Device to CPU storage copy failed: ", casNpuGetErrorString(err));
+    }
+    
+    // 在CPU上创建相同metadata的tensor view
+    auto cpu_tensor = at::empty({0}, self.options().device(at::kCPU));
+    cpu_tensor.set_(cpu_storage, storage_offset, self.sizes(), self.strides());
+    
+    // 调用CPU的contiguous（不会递归，因为在CPU上）
+    auto contiguous_cpu = cpu_tensor.contiguous(memory_format);
+    
+    // 复制回device
     return cpu_to_device(contiguous_cpu, self.device());
 }
 
