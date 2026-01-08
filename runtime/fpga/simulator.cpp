@@ -70,6 +70,10 @@ CasNpuError casNpuMalloc(void** ptr, size_t size) {
         return CAS_NPU_ERROR_OUT_OF_MEMORY;
     }
     
+    // 初始化内存为0，避免未初始化内存包含NaN/Inf值
+    // 注意：虽然PyTorch的empty操作不保证初始化，但为了数值稳定性，我们初始化内存
+    memset(data, 0, size);
+    
     // 跟踪分配
     {
         std::lock_guard<std::mutex> lock(allocation_mutex);

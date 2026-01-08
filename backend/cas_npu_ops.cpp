@@ -864,6 +864,9 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("add.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("sub.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("div.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("div.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("div.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("div.Scalar_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("neg", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("mul.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("mul.Scalar_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -899,6 +902,13 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("contiguous", &cas_npu_contiguous);
     m.impl("index_select", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("embedding", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    
+    // 索引操作 (CPU Fallback)
+    m.impl("index.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("index.Tensor_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("index_put_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("index_put", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("index_put.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("flatten.using_ints", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("unflatten.int", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
@@ -922,6 +932,12 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("leaky_relu_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("leaky_relu_backward", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
+    // Dropout 相关操作 (CPU Fallback)
+    m.impl("native_dropout", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("native_dropout_backward", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("dropout", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("dropout_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+
     // 三角函数和其他数学函数
     m.impl("cos.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("sin.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -931,6 +947,22 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("exp.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("reciprocal", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("reciprocal.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    
+    // 线性插值操作 (优化器中使用，如 AdamW)
+    m.impl("lerp.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("lerp.Scalar_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("lerp.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("lerp.Tensor_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    
+    // Foreach 操作符 (优化器批量处理张量列表时使用)
+    m.impl("_foreach_lerp_.ScalarList", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("_foreach_lerp_.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("_foreach_lerp.ScalarList", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("_foreach_lerp.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("_foreach_div_.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("_foreach_div_.ScalarList", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("_foreach_div.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("_foreach_div.ScalarList", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
     // 矩阵运算
     m.impl("addmm", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -949,6 +981,8 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("mse_loss", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("mse_loss_backward", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("cross_entropy_loss", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+
+    m.impl("normal_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
     // 打印相关和检查操作
     m.impl("abs", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -957,6 +991,22 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("isinf", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("isfinite", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("ne.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("all", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("all.all_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("any", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("any.any_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    
+    // 位运算操作 (CPU Fallback)
+    m.impl("bitwise_and.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_and.Tensor_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_and.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_and.Scalar_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_or.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_or.Tensor_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_xor.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_xor.Tensor_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_not", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("bitwise_not.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("eq.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("ne.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("eq.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -981,6 +1031,10 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("addcmul_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("addcdiv_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("sqrt_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    
+    // 注意：PyTorch 的 PrivateUse1 后端不支持自动全局 fallback
+    // 必须手动注册每个操作符。如果遇到新的未实现操作符，需要在这里添加
+    // 建议：遇到新错误时，添加相应的 fallback 注册
 }
 
 // ============ AutogradPrivateUse1 注册 ============
