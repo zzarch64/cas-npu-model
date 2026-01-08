@@ -54,7 +54,9 @@ inline int debug_level() {
     return level;
 }
 
-// ============ 颜色定义 (ANSI) ============
+// ============ 颜色定义 (ANSI) - 已禁用，输出为纯文本日志 ============
+// 如需恢复颜色输出，取消下面的注释
+/*
 namespace color {
     constexpr const char* RESET   = "\033[0m";
     constexpr const char* GREEN   = "\033[32m";  // NPU原生
@@ -66,6 +68,7 @@ namespace color {
     constexpr const char* BOLD    = "\033[1m";
     constexpr const char* DIM     = "\033[2m";
 }
+*/
 
 // ============ 统计计数器 ============
 struct DebugStats {
@@ -94,26 +97,21 @@ struct DebugStats {
     }
     
     void print_summary() {
-        fprintf(stderr, "\n%s%s========== CAS-NPU Debug Summary ==========%s\n",
-                color::BOLD, color::MAGENTA, color::RESET);
-        fprintf(stderr, "%s[Operator Statistics]%s\n", color::BOLD, color::RESET);
-        fprintf(stderr, "  %s● NPU Native ops:      %lu%s\n", 
-                color::GREEN, npu_native_ops.load(), color::RESET);
-        fprintf(stderr, "  %s● CPU Fallback ops:    %lu%s\n", 
-                color::YELLOW, cpu_fallback_ops.load(), color::RESET);
-        fprintf(stderr, "  %s● View ops:            %lu%s\n", 
-                color::CYAN, view_ops.load(), color::RESET);
-        fprintf(stderr, "  %s● Pure Fallback ops:   %lu%s\n", 
-                color::RED, pure_fallback_ops.load(), color::RESET);
-        fprintf(stderr, "\n%s[Data Transfer Statistics]%s\n", color::BOLD, color::RESET);
-        fprintf(stderr, "  %s↑ Host→Device:  %lu times, %.2f MB%s\n",
-                color::BLUE, h2d_transfers.load(), h2d_bytes.load() / 1024.0 / 1024.0, color::RESET);
-        fprintf(stderr, "  %s↓ Device→Host:  %lu times, %.2f MB%s\n",
-                color::BLUE, d2h_transfers.load(), d2h_bytes.load() / 1024.0 / 1024.0, color::RESET);
-        fprintf(stderr, "  %s⇄ Device⇄Device: %lu times, %.2f MB%s\n",
-                color::BLUE, d2d_transfers.load(), d2d_bytes.load() / 1024.0 / 1024.0, color::RESET);
-        fprintf(stderr, "%s%s==============================================%s\n\n",
-                color::BOLD, color::MAGENTA, color::RESET);
+        fprintf(stdout, "\n========== CAS-NPU Debug Summary ==========\n");
+        fprintf(stdout, "[Operator Statistics]\n");
+        fprintf(stdout, "  * NPU Native ops:      %lu\n", npu_native_ops.load());
+        fprintf(stdout, "  * CPU Fallback ops:    %lu\n", cpu_fallback_ops.load());
+        fprintf(stdout, "  * View ops:            %lu\n", view_ops.load());
+        fprintf(stdout, "  * Pure Fallback ops:   %lu\n", pure_fallback_ops.load());
+        fprintf(stdout, "\n[Data Transfer Statistics]\n");
+        fprintf(stdout, "  ^ Host->Device:  %lu times, %.2f MB\n",
+                h2d_transfers.load(), h2d_bytes.load() / 1024.0 / 1024.0);
+        fprintf(stdout, "  v Device->Host:  %lu times, %.2f MB\n",
+                d2h_transfers.load(), d2h_bytes.load() / 1024.0 / 1024.0);
+        fprintf(stdout, "  <-> Device<->Device: %lu times, %.2f MB\n",
+                d2d_transfers.load(), d2d_bytes.load() / 1024.0 / 1024.0);
+        fprintf(stdout, "==============================================\n\n");
+        fflush(stdout);
     }
 };
 
@@ -135,23 +133,15 @@ inline const char* op_type_str(OpType type) {
     }
 }
 
-inline const char* op_type_color(OpType type) {
-    switch (type) {
-        case OpType::NPU_NATIVE:   return color::GREEN;
-        case OpType::CPU_FALLBACK: return color::YELLOW;
-        case OpType::VIEW_OP:      return color::CYAN;
-        case OpType::PURE_FALLBACK:return color::RED;
-        case OpType::DATA_COPY:    return color::BLUE;
-        default:                   return color::RESET;
-    }
-}
+// 颜色函数已禁用，输出为纯文本日志
+// inline const char* op_type_color(OpType type) { ... }
 
 inline const char* transfer_dir_str(TransferDir dir) {
     switch (dir) {
-        case TransferDir::HOST_TO_DEVICE:   return "H→D";
-        case TransferDir::DEVICE_TO_HOST:   return "D→H";
-        case TransferDir::DEVICE_TO_DEVICE: return "D→D";
-        case TransferDir::HOST_TO_HOST:     return "H→H";
+        case TransferDir::HOST_TO_DEVICE:   return "H->D";
+        case TransferDir::DEVICE_TO_HOST:   return "D->H";
+        case TransferDir::DEVICE_TO_DEVICE: return "D->D";
+        case TransferDir::HOST_TO_HOST:     return "H->H";
         case TransferDir::NONE:
         default:                            return "";
     }
@@ -171,13 +161,11 @@ inline const char* transfer_dir_str(TransferDir dir) {
                 case ::cas_npu::debug::OpType::PURE_FALLBACK: stats.pure_fallback_ops++; break; \
                 case ::cas_npu::debug::OpType::DATA_COPY: break; /* 传输统计单独处理 */ \
             } \
-            fprintf(stderr, "%s[%s]%s %s" fmt "%s\n", \
-                    ::cas_npu::debug::op_type_color(op_type), \
+            fprintf(stdout, "[%s] %s" fmt "\n", \
                     ::cas_npu::debug::op_type_str(op_type), \
-                    ::cas_npu::debug::color::RESET, \
                     op_name, \
-                    ##__VA_ARGS__, \
-                    ::cas_npu::debug::color::RESET); \
+                    ##__VA_ARGS__); \
+            fflush(stdout); \
         } \
     } while(0)
 
@@ -195,12 +183,11 @@ inline const char* transfer_dir_str(TransferDir dir) {
                     stats.d2d_transfers++; stats.d2d_bytes += bytes; break; \
                 default: break; \
             } \
-            fprintf(stderr, "  %s    ↳ [%s] %.2f KB" fmt "%s\n", \
-                    ::cas_npu::debug::color::BLUE, \
+            fprintf(stdout, "  [COPY] _copy_from %s %.2f KB" fmt "\n", \
                     ::cas_npu::debug::transfer_dir_str(dir), \
                     static_cast<double>(bytes) / 1024.0, \
-                    ##__VA_ARGS__, \
-                    ::cas_npu::debug::color::RESET); \
+                    ##__VA_ARGS__); \
+            fflush(stdout); \
         } \
     } while(0)
 
@@ -208,11 +195,10 @@ inline const char* transfer_dir_str(TransferDir dir) {
 #define CAS_NPU_DEBUG_RUNTIME(api_name, fmt, ...) \
     do { \
         if (::cas_npu::debug::debug_level() >= 3) { \
-            fprintf(stderr, "  %s      └─ Runtime: %s" fmt "%s\n", \
-                    ::cas_npu::debug::color::DIM, \
+            fprintf(stdout, "      Runtime: %s" fmt "\n", \
                     api_name, \
-                    ##__VA_ARGS__, \
-                    ::cas_npu::debug::color::RESET); \
+                    ##__VA_ARGS__); \
+            fflush(stdout); \
         } \
     } while(0)
 

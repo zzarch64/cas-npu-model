@@ -350,7 +350,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 model = AutoModel.from_pretrained(
     model_name,
     trust_remote_code=True,
-    torch_dtype=torch.float32,
+    dtype=torch.float32,
 )
 
 # 移动到 NPU

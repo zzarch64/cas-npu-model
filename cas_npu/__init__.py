@@ -1,11 +1,30 @@
 # CAS-NPU Python Package
 # 自定义设备扩展，使用PrivateUse1 dispatch key
 
+import sys
 import torch
 from torch.utils.backend_registration import (
     rename_privateuse1_backend,
     generate_methods_for_privateuse1_backend,
 )
+
+# 设置 stdout 为行缓冲模式，确保与 C++ 调试输出的顺序正确
+# 当重定向到文件时，Python 默认使用全缓冲，会导致输出顺序混乱
+# 这确保 Python print() 和 C++ fprintf(stdout) 的输出顺序一致
+# 注意：只有在启用调试时才设置，避免影响正常使用
+import os
+_debug_enabled = os.environ.get('CAS_NPU_DEBUG', '0') in ('1', 'true')
+_debug_level = int(os.environ.get('CAS_NPU_DEBUG_LEVEL', '0'))
+if (_debug_enabled or _debug_level > 0) and not sys.stdout.isatty():
+    # 只有在启用调试且重定向到文件时才设置（终端默认就是行缓冲）
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            # Python 3.7+ 支持 reconfigure
+            sys.stdout.reconfigure(line_buffering=True)
+        # Python < 3.7 需要用户使用 python -u 运行，或手动 flush
+    except Exception:
+        # 如果设置失败，忽略（不影响功能）
+        pass
 
 # 重命名PrivateUse1后端为cas_npu
 _BACKEND_NAME = "cas_npu"
@@ -88,6 +107,22 @@ class _CasNpuModule:
 
 # 自动初始化
 _C = _init_extension()
+
+# 在程序退出时自动打印调试统计摘要（如果启用了调试）
+import atexit
+def _print_debug_summary_on_exit():
+    """程序退出时打印调试统计摘要"""
+    try:
+        # 检查是否启用了调试
+        import os
+        debug_enabled = os.environ.get('CAS_NPU_DEBUG', '0') in ('1', 'true')
+        debug_level = int(os.environ.get('CAS_NPU_DEBUG_LEVEL', '0'))
+        if debug_enabled and debug_level >= 1:
+            _C.print_debug_summary()
+    except:
+        pass  # 忽略错误，避免影响程序正常退出
+
+atexit.register(_print_debug_summary_on_exit)
 
 # 导出公共API
 def is_available() -> bool:

@@ -1,5 +1,6 @@
 // CAS-NPU Python Module - Pybind11绑定
 #include "runtime/cas_npu_runtime.h"
+#include "runtime/cas_npu_debug.h"
 
 #include <torch/extension.h>
 #include <c10/core/Device.h>
@@ -52,6 +53,11 @@ void synchronize(int device = -1) {
     }
 }
 
+// 打印调试统计摘要
+void print_debug_summary() {
+    CAS_NPU_DEBUG_SUMMARY();
+}
+
 // Python模块定义
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.doc() = "CAS-NPU custom device extension for PyTorch";
@@ -76,6 +82,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("synchronize", &synchronize,
           py::arg("device") = -1,
           "Synchronize device");
+    
+    m.def("print_debug_summary", &print_debug_summary,
+          "Print CAS-NPU debug statistics summary");
 }
 
 } // namespace cas_npu

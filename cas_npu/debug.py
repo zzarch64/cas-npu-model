@@ -107,6 +107,21 @@ class debug_mode:
         os.environ['CAS_NPU_DEBUG_LEVEL'] = self.old_level
         return False
 
+def print_summary():
+    """
+    打印调试统计摘要
+    
+    显示算子执行统计和数据传输统计。
+    如果调试未启用，此函数不会打印任何内容。
+    """
+    try:
+        import cas_npu
+        cas_npu._C.print_debug_summary()
+    except ImportError:
+        print("[CAS-NPU Debug] 无法打印统计摘要：扩展未加载")
+    except AttributeError:
+        print("[CAS-NPU Debug] 无法打印统计摘要：接口不可用")
+
 __all__ = [
     'enable',
     'disable', 
@@ -114,4 +129,5 @@ __all__ = [
     'is_enabled',
     'get_level',
     'debug_mode',
+    'print_summary',
 ]

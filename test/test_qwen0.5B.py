@@ -116,7 +116,7 @@ def test_qwen_model():
         model = AutoModel.from_pretrained(
             model_name,
             trust_remote_code=True,
-            torch_dtype=torch.float32,  # 使用float32，因为我们的实现只支持float
+            dtype=torch.float32,  # 使用float32，因为我们的实现只支持float
             local_files_only=True,
         )
         print("  ✓ Model loaded (from cache)")
@@ -128,7 +128,7 @@ def test_qwen_model():
             model = AutoModel.from_pretrained(
                 model_name,
                 trust_remote_code=True,
-                torch_dtype=torch.float32,
+                dtype=torch.float32,
             )
             print("  ✓ Model loaded")
         except Exception as e2:
@@ -140,7 +140,7 @@ def test_qwen_model():
                 model = AutoModel.from_pretrained(
                     model_name,
                     trust_remote_code=True,
-                    torch_dtype=torch.float32,
+                    dtype=torch.float32,
                     local_files_only=True,
                 )
                 print("  ✓ Model loaded (alternative, from cache)")
@@ -232,7 +232,7 @@ def test_lora_finetune():
         model = AutoModel.from_pretrained(
             model_name,
             trust_remote_code=True,
-            torch_dtype=torch.float32,
+            dtype=torch.float32,
             local_files_only=True,
         )
         print("  ✓ Model loaded (from cache)")
@@ -243,7 +243,7 @@ def test_lora_finetune():
             model = AutoModel.from_pretrained(
                 model_name,
                 trust_remote_code=True,
-                torch_dtype=torch.float32,
+                dtype=torch.float32,
             )
             print("  ✓ Model loaded")
         except Exception as e2:
@@ -255,7 +255,7 @@ def test_lora_finetune():
                 model = AutoModel.from_pretrained(
                     model_name,
                     trust_remote_code=True,
-                    torch_dtype=torch.float32,
+                    dtype=torch.float32,
                     local_files_only=True,
                 )
                 print("  ✓ Alternative model loaded (from cache)")
@@ -387,7 +387,7 @@ def test_lora_finetune():
     
     # 运行几个训练步骤
     print("\nRunning training steps...")
-    num_steps = 3
+    num_steps = 10
     losses = []
     
     # 验证输入数据在正确的设备上
