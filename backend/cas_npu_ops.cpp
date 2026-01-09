@@ -108,12 +108,30 @@ at::Tensor cas_npu_add_Tensor(
     // 确定目标设备
     c10::Device target_device = self_on_device ? self.device() : other.device();
     
-    // 处理混合设备情况：将 CPU tensor copy 到设备
+    // 检查类型：如果任何一个 tensor 不是 float 类型，需要 fallback 到 CPU
+    // 注意：CAS-NPU 目前只支持 float 类型，其他类型（bool, int等）需要 fallback
+    bool need_fallback = (self.scalar_type() != at::kFloat || other.scalar_type() != at::kFloat);
+    
+    if (need_fallback) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "add.Tensor", " (non-float type)");
+        // 将设备上的 tensor 移到 CPU，CPU 上的 tensor 保持不动
+        at::Tensor self_cpu = self_on_device ? 
+            device_to_cpu(self.is_contiguous() ? self : self.contiguous()) : self;
+        at::Tensor other_cpu = other_on_device ? 
+            device_to_cpu(other.is_contiguous() ? other : other.contiguous()) : other;
+        
+        // 在 CPU 上执行加法
+        at::Tensor result_cpu = at::add(self_cpu, other_cpu, alpha);
+        
+        // 对于非 float 类型，结果保持在 CPU 上
+        // 如果调用者需要结果在设备上，它会自己处理（通过 .to(device)）
+        // 这样可以避免类型不匹配的问题
+        return result_cpu;
+    }
+    
+    // 处理混合设备情况：将 CPU tensor copy 到设备（现在两个都是 float 类型）
     at::Tensor self_device = self_on_device ? self : cpu_to_device(self, target_device);
     at::Tensor other_device = other_on_device ? other : cpu_to_device(other, target_device);
-    
-    TORCH_CHECK(self_device.scalar_type() == at::kFloat,
-                "Only float tensors supported for now");
     
     // 处理广播：先将数据 copy 到 CPU，使用 CPU 实现，再 copy 回设备
     auto output_size = at::infer_size(self_device.sizes(), other_device.sizes());
@@ -169,24 +187,50 @@ at::Tensor cas_npu_mm(
     const at::Tensor& input,
     const at::Tensor& mat2) {
     
-    TORCH_CHECK(input.device().is_privateuseone(), 
-                "Expected tensor on CAS-NPU device");
-    TORCH_CHECK(mat2.device().is_privateuseone(), 
-                "Expected tensor on CAS-NPU device");
     TORCH_CHECK(input.dim() == 2, "input must be 2D tensor");
     TORCH_CHECK(mat2.dim() == 2, "mat2 must be 2D tensor");
     TORCH_CHECK(input.size(1) == mat2.size(0),
                 "input size(1) must match mat2 size(0)");
-    TORCH_CHECK(input.scalar_type() == at::kFloat,
-                "Only float tensors supported for now");
-    TORCH_CHECK(mat2.scalar_type() == at::kFloat,
-                "Only float tensors supported for now");
+    
+    bool input_on_device = input.device().is_privateuseone();
+    bool mat2_on_device = mat2.device().is_privateuseone();
+    
+    // 如果两个 tensor 都在 CPU 上，直接 fallback 到 CPU
+    if (!input_on_device && !mat2_on_device) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "mm", " (both on CPU)");
+        return at::mm(input, mat2);
+    }
+    
+    // 确定目标设备
+    c10::Device target_device = input_on_device ? input.device() : mat2.device();
+    
+    // 检查类型：如果任何一个 tensor 不是 float 类型，需要 fallback 到 CPU
+    bool need_fallback = (input.scalar_type() != at::kFloat || mat2.scalar_type() != at::kFloat);
+    
+    if (need_fallback) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "mm", " (non-float type)");
+        // 将设备上的 tensor 移到 CPU，CPU 上的 tensor 保持不动
+        at::Tensor input_cpu = input_on_device ? 
+            device_to_cpu(input.is_contiguous() ? input : input.contiguous()) : input;
+        at::Tensor mat2_cpu = mat2_on_device ? 
+            device_to_cpu(mat2.is_contiguous() ? mat2 : mat2.contiguous()) : mat2;
+        
+        // 在 CPU 上执行矩阵乘法
+        at::Tensor result_cpu = at::mm(input_cpu, mat2_cpu);
+        
+        // 对于非 float 类型，结果保持在 CPU 上
+        return result_cpu;
+    }
+    
+    // 处理混合设备情况：将 CPU tensor copy 到设备（现在两个都是 float 类型）
+    at::Tensor input_device = input_on_device ? input : cpu_to_device(input, target_device);
+    at::Tensor mat2_device = mat2_on_device ? mat2 : cpu_to_device(mat2, target_device);
     
     // 重要：确保输入tensor是contiguous的！
     // 当tensor是transpose后的结果（如weight.t()）时，它是非contiguous的
     // 直接使用data_ptr()会导致读取错误的数据（stride信息被忽略）
-    auto input_contig = input.is_contiguous() ? input : input.contiguous();
-    auto mat2_contig = mat2.is_contiguous() ? mat2 : mat2.contiguous();
+    auto input_contig = input_device.is_contiguous() ? input_device : input_device.contiguous();
+    auto mat2_contig = mat2_device.is_contiguous() ? mat2_device : mat2_device.contiguous();
     
     int64_t M = input_contig.size(0);
     int64_t K = input_contig.size(1);
@@ -213,26 +257,52 @@ at::Tensor cas_npu_bmm(
     const at::Tensor& input,
     const at::Tensor& mat2) {
     
-    TORCH_CHECK(input.device().is_privateuseone(), 
-                "Expected tensor on CAS-NPU device");
-    TORCH_CHECK(mat2.device().is_privateuseone(), 
-                "Expected tensor on CAS-NPU device");
     TORCH_CHECK(input.dim() == 3, "input must be 3D tensor");
     TORCH_CHECK(mat2.dim() == 3, "mat2 must be 3D tensor");
     TORCH_CHECK(input.size(0) == mat2.size(0),
                 "batch sizes must match");
     TORCH_CHECK(input.size(2) == mat2.size(1),
                 "input size(2) must match mat2 size(1)");
-    TORCH_CHECK(input.scalar_type() == at::kFloat,
-                "Only float tensors supported for now");
-    TORCH_CHECK(mat2.scalar_type() == at::kFloat,
-                "Only float tensors supported for now");
+    
+    bool input_on_device = input.device().is_privateuseone();
+    bool mat2_on_device = mat2.device().is_privateuseone();
+    
+    // 如果两个 tensor 都在 CPU 上，直接 fallback 到 CPU
+    if (!input_on_device && !mat2_on_device) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "bmm", " (both on CPU)");
+        return at::bmm(input, mat2);
+    }
+    
+    // 确定目标设备
+    c10::Device target_device = input_on_device ? input.device() : mat2.device();
+    
+    // 检查类型：如果任何一个 tensor 不是 float 类型，需要 fallback 到 CPU
+    bool need_fallback = (input.scalar_type() != at::kFloat || mat2.scalar_type() != at::kFloat);
+    
+    if (need_fallback) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "bmm", " (non-float type)");
+        // 将设备上的 tensor 移到 CPU，CPU 上的 tensor 保持不动
+        at::Tensor input_cpu = input_on_device ? 
+            device_to_cpu(input.is_contiguous() ? input : input.contiguous()) : input;
+        at::Tensor mat2_cpu = mat2_on_device ? 
+            device_to_cpu(mat2.is_contiguous() ? mat2 : mat2.contiguous()) : mat2;
+        
+        // 在 CPU 上执行批量矩阵乘法
+        at::Tensor result_cpu = at::bmm(input_cpu, mat2_cpu);
+        
+        // 对于非 float 类型，结果保持在 CPU 上
+        return result_cpu;
+    }
+    
+    // 处理混合设备情况：将 CPU tensor copy 到设备（现在两个都是 float 类型）
+    at::Tensor input_device = input_on_device ? input : cpu_to_device(input, target_device);
+    at::Tensor mat2_device = mat2_on_device ? mat2 : cpu_to_device(mat2, target_device);
     
     // 重要：确保输入tensor是contiguous的！
     // 当tensor是transpose后的结果时，它是非contiguous的
     // 直接使用data_ptr()会导致读取错误的数据（stride信息被忽略）
-    auto input_contig = input.is_contiguous() ? input : input.contiguous();
-    auto mat2_contig = mat2.is_contiguous() ? mat2 : mat2.contiguous();
+    auto input_contig = input_device.is_contiguous() ? input_device : input_device.contiguous();
+    auto mat2_contig = mat2_device.is_contiguous() ? mat2_device : mat2_device.contiguous();
     
     int64_t B = input_contig.size(0);
     int64_t M = input_contig.size(1);
@@ -1005,6 +1075,10 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     // 规约操作
     m.impl("sum", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("sum.dim_IntList", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("cumsum", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("cumsum.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("cumsum.dimname", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("cumsum.dimname_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("mean", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("var", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("var.correction", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -1015,12 +1089,24 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("min.dim", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("argmax", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("argmin", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("topk", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("topk.values", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sort", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sort.values", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sort.values_stable", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sort.dimname", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sort.dimname_values", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("sort.dimname_values_stable", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
     // Tensor操作
     m.impl("clone", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("contiguous", &cas_npu_contiguous);
     m.impl("index_select", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("embedding", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("gather", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("gather.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("gather.dimname", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("gather.dimname_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
     // 索引操作 (CPU Fallback)
     m.impl("index.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -1028,6 +1114,14 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("index_put_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("index_put", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("index_put.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter.src", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter.src_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter.value", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter.value_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter.dimname", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter.dimname_src", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("scatter.dimname_value", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("flatten.using_ints", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("unflatten.int", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
@@ -1102,6 +1196,8 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("cross_entropy_loss", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
 
     m.impl("normal_", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("multinomial", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("multinomial.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
     // 打印相关和检查操作
     m.impl("abs", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
@@ -1109,6 +1205,10 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("isnan", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("isinf", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("isfinite", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("isin.Tensor_Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("isin.Tensor_Tensor_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("isin.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("isin.Scalar_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("ne.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("all", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("all.all_out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());

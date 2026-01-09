@@ -345,7 +345,7 @@ from transformers import AutoModel, AutoTokenizer
 device = torch.device('cas_npu:0')
 
 # 加载模型
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+model_name = "Qwen/Qwen2.5-0.5B"
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
 model = AutoModel.from_pretrained(
     model_name,

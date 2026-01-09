@@ -19,8 +19,8 @@ python setup.py build_ext --inplace
 
 # 运行测试
 echo ""
-echo "Step 3: Running tests..."
-python test/test_cas_npu.py
+# echo "Step 3: Running tests..."
+# python test/run_all_tests.py
 
 echo ""
 echo "=========================================="

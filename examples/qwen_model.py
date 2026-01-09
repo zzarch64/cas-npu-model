@@ -108,7 +108,7 @@ def test_qwen_model():
     print("=" * 60)
     
     device = torch.device('cas_npu:0')
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+    model_name = "Qwen/Qwen2.5-0.5B"
     
     print(f"\nLoading model: {model_name}")
     print("  (This may take a while on first run...)")
@@ -226,7 +226,7 @@ def test_lora_finetune():
         return False
     
     device = torch.device('cas_npu:0')
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+    model_name = "Qwen/Qwen2.5-0.5B"
     
     print(f"\nLoading model: {model_name}")
     try:
