@@ -2,24 +2,219 @@
 
 本目录包含 CAS-NPU 扩展的完整测试套件，用于验证自定义设备的功能和正确性。
 
-## 📋 测试文件概览
+## 📁 目录结构
 
-### 1. `test_concept.py` - 概念验证测试
+```
+test/
+├── run_all_tests.py          # 运行所有测试的脚本
+├── test_framework.py          # 测试框架和工具函数
+├── unit/                      # 单元测试
+│   ├── test_basic_ops.py     # 基础操作测试（add_, copy_）
+│   ├── test_gradient.py       # 梯度计算测试
+│   ├── test_addmm.py         # addmm 操作测试
+│   └── test_linear.py         # Linear 层测试
+├── integration/               # 集成测试
+│   ├── test_cas_npu.py       # 基础功能测试
+│   ├── test_concept.py       # 概念验证测试
+│   └── test_custom_ops.py    # 自定义算子测试
+└── tools/                     # 测试工具
+    ├── gradient_analyzer.py   # 梯度 NaN 分析工具
+    └── test_nan_diagnosis.py # NaN 诊断工具
+```
+
+## 🚀 快速开始
+
+### 1. 编译扩展
+
+在运行测试之前，需要先编译 C++ 扩展：
+
+```bash
+# 在项目根目录
+python setup.py build_ext --inplace
+```
+
+### 2. 运行测试
+
+#### 运行所有测试（推荐）
+
+使用 `run_all_tests.py` 脚本可以一次性运行所有测试：
+
+```bash
+# 运行所有测试
+python test/run_all_tests.py
+
+# 只运行单元测试
+python test/run_all_tests.py --unit
+
+# 只运行集成测试
+python test/run_all_tests.py --integration
+
+# 详细输出
+python test/run_all_tests.py -vv
+
+# 安静模式（只显示结果）
+python test/run_all_tests.py -q
+
+# 包含测试工具
+python test/run_all_tests.py --tools
+```
+
+#### 运行单个测试文件
+
+```bash
+# 基础操作测试
+python test/unit/test_basic_ops.py
+
+# 梯度计算测试
+python test/unit/test_gradient.py
+
+# addmm 操作测试
+python test/unit/test_addmm.py
+
+# Linear 层测试
+python test/unit/test_linear.py
+```
+
+#### 运行集成测试
+
+```bash
+# 基础功能测试
+python test/integration/test_cas_npu.py
+
+# 概念验证测试（无需编译）
+python test/integration/test_concept.py
+
+# 自定义算子测试
+python test/integration/test_custom_ops.py
+```
+
+#### 使用测试工具
+
+```bash
+# 梯度 NaN 分析
+python test/tools/gradient_analyzer.py
+
+# NaN 诊断
+python test/tools/test_nan_diagnosis.py
+```
+
+### 3. 测试参数
+
+所有测试都支持统一的命令行参数：
+
+```bash
+# 详细输出（-v: normal, -vv: verbose, -vvv: debug）
+python test/unit/test_basic_ops.py -vv
+
+# 安静模式（只显示结果）
+python test/unit/test_basic_ops.py -q
+
+# 指定设备
+python test/unit/test_basic_ops.py --device cas_npu:0
+
+# 指定容差
+python test/unit/test_basic_ops.py --tolerance 1e-6
+```
+
+## 📋 测试文件详细说明
+
+### 单元测试 (test/unit/)
+
+#### `test_basic_ops.py` - 基础操作测试
+
+**测试内容**:
+- `add_.Tensor` 操作（原地加法）
+- 梯度累积模拟（使用 `add_`）
+- 大 tensor 拷贝（CPU <-> Device）
+- 部分拷贝（包含 NaN 的情况）
+
+**运行方式**:
+```bash
+python test/unit/test_basic_ops.py [-v] [-q] [--device DEVICE] [--tolerance TOL]
+```
+
+---
+
+#### `test_gradient.py` - 梯度计算测试
+
+**测试内容**:
+- 梯度 tensor 创建过程
+- 梯度流动过程（前向和反向传播）
+- 梯度数值验证
+- 手动梯度计算验证
+
+**运行方式**:
+```bash
+python test/unit/test_gradient.py [-v] [-q] [--device DEVICE] [--tolerance TOL]
+```
+
+---
+
+#### `test_addmm.py` - addmm 操作测试
+
+**测试内容**:
+- addmm 前向传播
+- addmm 梯度计算
+- 梯度数值验证（与手动计算对比）
+- 逐步检查梯度计算过程
+
+**运行方式**:
+```bash
+python test/unit/test_addmm.py [-v] [-q] [--device DEVICE] [--tolerance TOL]
+```
+
+---
+
+#### `test_linear.py` - Linear 层测试
+
+**测试内容**:
+- Linear 层前向传播
+- 手动矩阵乘法验证
+- 添加偏置验证
+- Linear 层反向传播
+- 梯度验证
+
+**运行方式**:
+```bash
+python test/unit/test_linear.py [-v] [-q] [--device DEVICE] [--tolerance TOL]
+```
+
+---
+
+### 集成测试 (test/integration/)
+
+#### `test_cas_npu.py` - 基础功能测试
+
+**用途**: 测试 CAS-NPU 扩展的基础功能
+
+**测试内容**:
+1. 设备可用性检查
+2. Tensor 创建和设备转移
+3. add.Tensor 操作
+4. 设备切换
+5. Tensor 方法
+
+**运行方式**:
+```bash
+python test/integration/test_cas_npu.py
+```
+
+**前置条件**: 需要先编译 C++ 扩展
+
+---
+
+#### `test_concept.py` - 概念验证测试
+
 **用途**: 纯 Python 实现的概念验证，无需编译 C++ 扩展
 
 **特点**:
 - 使用 NumPy 模拟 CAS-NPU 设备操作
 - 验证 PrivateUse1 机制的设计正确性
-- 手动注册操作实现（使用 `@torch.library.impl` 装饰器）
-
-**测试内容**:
-- 基本 CAS-NPU 操作（add, mul 等）
-- Tensor 方法生成验证
-- 设备注册和可用性检查
+- 手动注册操作实现
 
 **运行方式**:
 ```bash
-python test/test_concept.py
+python test/integration/test_concept.py
 ```
 
 **适用场景**: 
@@ -28,185 +223,57 @@ python test/test_concept.py
 
 ---
 
-### 2. `test_cas_npu.py` - 基础功能测试
-**用途**: 测试 CAS-NPU 扩展的基础功能
+#### `test_custom_ops.py` - 自定义算子测试
 
-**测试内容**:
-1. **设备可用性检查** (`test_device_availability`)
-   - 检查设备是否可用
-   - 验证设备数量
-
-2. **Tensor 创建和设备转移** (`test_tensor_creation`)
-   - 在 CPU 上创建 Tensor
-   - 转移到 cas_npu 设备
-   - 验证设备类型
-
-3. **add.Tensor 操作** (`test_add_tensor`)
-   - 测试自定义实现的加法操作
-   - 验证结果正确性
-
-4. **设备切换** (`test_device_switching`)
-   - 测试多设备切换功能
-   - 验证设备状态管理
-
-5. **Tensor 方法** (`test_tensor_methods`)
-   - 验证自动生成的 Tensor 方法（如 `is_cas_npu`）
+**用途**: 测试自定义量化算子示例
 
 **运行方式**:
 ```bash
-python test/test_cas_npu.py
+python test/integration/test_custom_ops.py
 ```
-
-**前置条件**: 
-- 需要先编译 C++ 扩展（`python setup.py build_ext --inplace`）
 
 ---
 
-### 3. `test_lenet.py` - LeNet 神经网络测试
-**用途**: 验证完整的神经网络前向传播和 CPU Fallback 机制
+### 测试工具 (test/tools/)
 
-**特点**:
-- 实现完整的 LeNet 网络结构
-- 演示 CPU Fallback 机制（未实现的操作自动回退到 CPU）
-- 验证 add 操作使用 CAS-NPU 实现
+#### `gradient_analyzer.py` - 梯度 NaN 分析工具
 
-**测试内容**:
-1. **CPU 基准测试** (`test_lenet_on_cpu`)
-   - 在 CPU 上运行 LeNet，作为参考基准
+**用途**: 分析梯度 tensor 中 NaN 的分布模式，帮助诊断梯度计算问题
 
-2. **CAS-NPU 测试** (`test_lenet_on_cas_npu`)
-   - 在 cas_npu 设备上运行 LeNet
-   - 验证前向传播功能
-
-3. **输出一致性验证** (`test_output_consistency`)
-   - 比较 CPU 和 CAS-NPU 的输出结果
-   - 确保数值正确性
-
-4. **add 操作验证** (`test_add_operation`)
-   - 验证 add 操作确实使用了 CAS-NPU 实现
-
-5. **多操作测试** (`test_multiple_operations`)
-   - 测试多个连续操作的正确性
+**功能**:
+- NaN 分布分析（按行、按列）
+- NaN 聚类分析
+- NaN 位置分析
+- 期望梯度对比
+- 内存布局分析
 
 **运行方式**:
 ```bash
-python test/test_lenet.py
+python test/tools/gradient_analyzer.py [-v] [-q] [--device DEVICE]
 ```
-
-**注意事项**:
-- 大部分操作（如卷积）会 fallback 到 CPU 执行
-- 只有已实现的操作（如 add）会在 CAS-NPU 上执行
 
 ---
 
-### 4. `test_lenet_training.py` - LeNet 训练测试
-**用途**: 验证反向传播、梯度计算和训练流程
+#### `test_nan_diagnosis.py` - NaN 诊断工具
 
-**特点**:
-- 使用 MSELoss 避免 log_softmax 相关问题
-- 实现完整的训练循环
-- 验证梯度计算和参数更新
-
-**测试内容**:
-1. **add 反向传播** (`test_add_backward`)
-   - 测试 add 操作的梯度计算
-
-2. **线性层反向传播** (`test_linear_backward`)
-   - 测试 Linear 层的反向传播
-
-3. **卷积层反向传播** (`test_conv_backward`)
-   - 测试 Conv2d 层的反向传播
-
-4. **完整训练流程** (`test_lenet_training`)
-   - 实现完整的训练循环
-   - 验证损失下降和参数更新
-
-5. **梯度累积** (`test_gradient_accumulation`)
-   - 测试梯度累积功能
+**用途**: 检查推理和训练过程中 NaN 的来源
 
 **运行方式**:
 ```bash
-python test/test_lenet_training.py
-```
-
-**前置条件**:
-- 需要实现 AutogradPrivateUse1 相关的反向传播操作
-
----
-
-### 5. `test_qwen0.5B.py` - Qwen 模型测试
-**用途**: 验证矩阵乘法（mm）和批量矩阵乘法（bmm）算子实现
-
-**特点**:
-- 测试真实的大语言模型（Qwen 0.5B）
-- 验证 mm 和 bmm 算子的正确性
-- 测试 Transformer 架构的关键操作
-
-**测试内容**:
-1. **基础 mm 和 bmm 操作** (`test_mm_bmm_basic`)
-   - 测试矩阵乘法的基本功能
-   - 验证批量矩阵乘法
-
-2. **Qwen 模型测试** (`test_qwen_model`)
-   - 加载 Qwen 0.5B 模型
-   - 将模型参数转移到 cas_npu 设备
-   - 运行前向传播
-   - 验证输出正确性
-
-3. **线性层测试** (`test_linear_layer`)
-   - 单独测试 Linear 层在 CAS-NPU 上的表现
-
-**运行方式**:
-```bash
-python test/test_qwen0.5B.py
-```
-
-**前置条件**:
-- 需要安装 `transformers` 库: `pip install transformers`
-- 需要实现 `mm` 和 `bmm` 算子（在 `cas_npu_ops.cpp` 中）
-
-**注意事项**:
-- 首次运行会下载模型权重（约 1GB）
-- 模型推理可能需要较长时间
-
----
-
-## 🚀 快速开始
-
-### 1. 编译扩展
-在运行测试之前，需要先编译 C++ 扩展：
-
-```bash
-# 在项目根目录
-python setup.py build_ext --inplace
-```
-
-### 2. 运行所有测试
-```bash
-# 运行基础测试
-python test/test_cas_npu.py
-
-# 运行概念验证（无需编译）
-python test/test_concept.py
-
-# 运行神经网络测试
-python test/test_lenet.py
-
-# 运行训练测试
-python test/test_lenet_training.py
-
-# 运行模型测试（需要 transformers）
-python test/test_qwen0.5B.py
-```
-
-### 3. 使用构建脚本
-项目根目录提供了 `build_and_test.sh` 脚本，可以自动编译并运行测试：
-
-```bash
-./build_and_test.sh
+python test/tools/test_nan_diagnosis.py
 ```
 
 ---
+
+## 🛠️ 测试框架
+
+所有单元测试都使用统一的测试框架 (`test_framework.py`)，提供：
+
+- **统一的 tensor 检查函数**: `check_tensor()`
+- **梯度验证函数**: `verify_tensor_match()`
+- **NaN 分析函数**: `analyze_nan_distribution()`
+- **可配置的详细程度**: QUIET, NORMAL, VERBOSE, DEBUG
+- **统一的命令行参数**: `-v`, `-q`, `--device`, `--tolerance`
 
 ## 📝 测试依赖
 
@@ -215,69 +282,32 @@ python test/test_qwen0.5B.py
 - NumPy
 
 ### 可选依赖
-- `transformers` - 用于 Qwen 模型测试
-  ```bash
-  pip install transformers
-  ```
-
----
+- `transformers` - 用于某些模型测试
+- `peft` - 用于 LoRA 测试
 
 ## 🔍 测试覆盖范围
 
-| 测试文件 | 设备注册 | 基础操作 | 神经网络 | 训练 | 大模型 |
-|---------|---------|---------|---------|------|--------|
-| `test_concept.py` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 测试文件 | 设备注册 | 基础操作 | 梯度计算 | 神经网络 | 大模型 |
+|---------|---------|---------|---------|---------|--------|
 | `test_cas_npu.py` | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `test_lenet.py` | ✅ | ✅ | ✅ | ❌ | ❌ |
-| `test_lenet_training.py` | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `test_qwen0.5B.py` | ✅ | ✅ | ✅ | ❌ | ✅ |
-
----
-
-## 🐛 故障排除
-
-### 问题 1: 导入错误
-```
-ImportError: Failed to import CAS-NPU extension
-```
-**解决方案**: 确保已编译 C++ 扩展，运行 `python setup.py build_ext --inplace`
-
-### 问题 2: 设备不可用
-```
-AssertionError: CAS-NPU device should be available
-```
-**解决方案**: 检查运行时模拟器是否正确初始化（cmodel 或 fpga）
-
-### 问题 3: transformers 未安装
-```
-ImportError: No module named 'transformers'
-```
-**解决方案**: 安装 transformers 库: `pip install transformers`
-
-### 问题 4: 操作未实现
-```
-RuntimeError: Could not run 'aten::xxx' with arguments from the 'PrivateUse1' backend
-```
-**解决方案**: 该操作尚未在 C++ 中实现，需要添加对应的实现或使用 CPU Fallback
-
----
-
-## 📚 相关文档
-
-- [主 README](../README.md) - 项目总体介绍
-- [MM_BMM 实现文档](../MM_BMM_IMPLEMENTATION.md) - 矩阵乘法实现细节
-- [PyTorch PrivateUse1 文档](https://pytorch.org/tutorials/advanced/extend_dispatcher.html) - PyTorch 官方文档
-
----
+| `test_concept.py` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `test_basic_ops.py` | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `test_gradient.py` | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `test_addmm.py` | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `test_linear.py` | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 ## 💡 开发建议
 
-1. **开发新功能时**: 先运行 `test_concept.py` 验证设计，再实现 C++ 版本
-2. **添加新操作时**: 在 `test_cas_npu.py` 中添加对应的单元测试
-3. **测试复杂模型时**: 使用 `test_lenet.py` 作为模板
-4. **验证训练功能时**: 参考 `test_lenet_training.py` 的实现
+1. **开发新功能时**: 先运行 `test/integration/test_concept.py` 验证设计，再实现 C++ 版本
+2. **添加新操作时**: 在 `test/unit/` 中添加对应的单元测试
+3. **测试复杂模型时**: 参考 `examples/` 目录下的示例代码
+4. **调试梯度问题**: 使用 `test/tools/gradient_analyzer.py` 分析 NaN 分布
 
----
+## 🔗 相关文档
+
+- [主 README](../README.md) - 项目总体介绍
+- [示例代码](../examples/README.md) - 使用示例
+- [开发日志](../DEVLOG.md) - 开发过程记录
 
 ## 📄 许可证
 

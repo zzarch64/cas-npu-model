@@ -1,9 +1,17 @@
 #!/usr/bin/env python
 """
-LeNet训练测试 - 使用MSELoss避免log_softmax问题
+LeNet 训练示例 - 使用 MSELoss 避免 log_softmax 问题
 
-由于AutogradPrivateUse1需要在C++中更完整地注册，
-这里使用MSELoss来演示训练流程（避免CrossEntropyLoss中的log_softmax）
+这个示例展示了：
+1. 在 cas_npu 设备上运行完整的训练流程
+2. 反向传播和梯度计算
+3. 参数更新和优化器使用
+
+由于 AutogradPrivateUse1 需要在 C++ 中更完整地注册，
+这里使用 MSELoss 来演示训练流程（避免 CrossEntropyLoss 中的 log_softmax）
+
+运行方式:
+    python examples/lenet_training.py
 """
 
 import sys

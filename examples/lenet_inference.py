@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 """
-LeNet神经网络测试 - 验证CPU Fallback机制
+LeNet 神经网络推理示例 - 验证 CPU Fallback 机制
 
-这个测试展示了：
-1. 在cas_npu设备上运行完整的神经网络（前向传播）
-2. 大部分操作会fallback到CPU执行
-3. add操作会使用我们实现的cas_npu版本
+这个示例展示了：
+1. 在 cas_npu 设备上运行完整的神经网络（前向传播）
+2. 大部分操作会 fallback 到 CPU 执行
+3. add 操作会使用我们实现的 cas_npu 版本
+
+运行方式:
+    python examples/lenet_inference.py
 """
 
 import sys
@@ -248,7 +251,7 @@ def test_multiple_operations():
 
 def main():
     print("=" * 60)
-    print("LeNet Neural Network Test on CAS-NPU Device")
+    print("LeNet Neural Network Inference Example on CAS-NPU Device")
     print("=" * 60)
     print()
     print("This demonstrates:")

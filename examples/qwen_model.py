@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 """
-Qwen0.5B 模型测试 - 验证 mm 和 bmm 算子实现
+Qwen 模型示例 - 验证 mm 和 bmm 算子实现
 
-测试步骤:
-1. 基础 mm 和 bmm 操作测试
-2. Linear 层测试（使用 mm）
-3. 加载 Qwen0.5B 模型并运行前向传播
-4. LoRA 微调训练测试（需要 peft 库）
+这个示例展示了：
+1. 基础 mm 和 bmm 操作的使用
+2. Linear 层在 CAS-NPU 上的使用
+3. 加载 Qwen 模型并运行前向传播
+4. LoRA 微调训练示例（需要 peft 库）
+
+运行方式:
+    python examples/qwen_model.py [--lora] [--no-lora]
 """
 
 import sys
