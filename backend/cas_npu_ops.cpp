@@ -389,37 +389,76 @@ at::Tensor cas_npu_copy_from(
     TORCH_CHECK(self.defined(), "Source tensor is not defined");
     TORCH_CHECK(dst.defined(), "Destination tensor is not defined");
     
+    // 【关键修复 1】检查数据类型是否相同
+    // 如果数据类型不同，需要使用 PyTorch 的 copy_ 来处理类型转换
+    // 直接 memcpy 不同类型的数据会导致问题
+    if (self.scalar_type() != dst.scalar_type()) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (dtype cast)");
+        
+        // 将 self 移到 CPU（如果不在的话）
+        at::Tensor self_cpu;
+        if (self.device().is_privateuseone()) {
+            self_cpu = at::empty(self.sizes(), self.options().device(at::kCPU));
+            size_t nbytes = self.numel() * self.element_size();
+            if (nbytes > 0) {
+                auto err = casNpuMemcpy(
+                    self_cpu.data_ptr(),
+                    self.data_ptr(),
+                    nbytes,
+                    CAS_NPU_MEMCPY_DEVICE_TO_HOST
+                );
+                TORCH_CHECK(err == CAS_NPU_SUCCESS, "Device to CPU copy failed");
+            }
+        } else {
+            self_cpu = self;
+        }
+        
+        // 在 CPU 上进行类型转换
+        at::Tensor result_cpu = at::empty(dst.sizes(), dst.options().device(at::kCPU));
+        result_cpu.copy_(self_cpu);  // PyTorch 会处理类型转换
+        
+        // 如果 dst 在 device 上，将结果拷贝回去
+        if (dst.device().is_privateuseone()) {
+            size_t nbytes = result_cpu.numel() * result_cpu.element_size();
+            if (nbytes > 0) {
+                auto err = casNpuMemcpy(
+                    dst.data_ptr(),
+                    result_cpu.data_ptr(),
+                    nbytes,
+                    CAS_NPU_MEMCPY_HOST_TO_DEVICE
+                );
+                TORCH_CHECK(err == CAS_NPU_SUCCESS, "Host to device copy failed");
+            }
+        } else {
+            dst.copy_(result_cpu);
+        }
+        return dst;
+    }
+    
     // 对于非contiguous tensor，需要特殊处理
-    // 策略：先将source变成contiguous，然后再拷贝
     if (!self.is_contiguous()) {
         CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (source non-contiguous)");
-        // 先将source变成contiguous，然后递归调用
         auto self_contig = self.contiguous();
         return cas_npu_copy_from(self_contig, dst, non_blocking);
     }
     
     if (!dst.is_contiguous()) {
-        // dst非contiguous的情况比较复杂，需要通过CPU处理
         CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (dst non-contiguous)");
         
-        // 对于CPU源，使用PyTorch的copy_操作来处理非contiguous dst
-        if (self.is_cpu()) {
-            // 如果self和dst都在CPU上，使用PyTorch的copy_操作
-            // copy_会自动处理stride信息
-            if (dst.is_cpu()) {
+        // 【关键修复 2】非 contiguous dst 的正确处理
+        // 需要先将数据拷贝到 contiguous 的临时 tensor，
+        // 然后通过 CPU 的 copy_ 来处理 stride
+        
+        if (self.is_cpu() && dst.is_cpu()) {
+            // 两者都在 CPU，直接使用 PyTorch 的 copy_
                 dst.copy_(self);
                 return dst;
             }
-            // 如果dst在device上，先复制到CPU的contiguous tensor，再复制到device
-            // 但这种情况应该很少见，因为通常dst应该已经是contiguous的
-            // 为了安全，我们先将dst变成contiguous
-            auto dst_contig = dst.contiguous();
-            return cas_npu_copy_from(self, dst_contig, non_blocking);
-        }
         
-        // 对于Device源，先复制到CPU，然后通过CPU处理
-        // 策略：先将self复制到CPU的contiguous tensor，然后使用CPU的copy_操作
-        auto self_cpu = at::empty(self.sizes(), self.options().device(at::kCPU));
+        // 将 self 移到 CPU
+        at::Tensor self_cpu;
+        if (self.device().is_privateuseone()) {
+            self_cpu = at::empty(self.sizes(), self.options().device(at::kCPU));
         size_t nbytes = self.numel() * self.element_size();
         if (nbytes > 0) {
             auto err = casNpuMemcpy(
@@ -428,29 +467,55 @@ at::Tensor cas_npu_copy_from(
                 nbytes,
                 CAS_NPU_MEMCPY_DEVICE_TO_HOST
             );
-            TORCH_CHECK(err == CAS_NPU_SUCCESS,
-                        "Device to CPU copy failed: ", casNpuGetErrorString(err));
+                TORCH_CHECK(err == CAS_NPU_SUCCESS, "Device to CPU copy failed");
+            }
+        } else {
+            self_cpu = self;
         }
         
-        // 如果dst在CPU上，使用CPU的copy_操作
         if (dst.is_cpu()) {
+            // dst 在 CPU，使用 copy_ 处理 stride
             dst.copy_(self_cpu);
             return dst;
         }
         
-        // 如果dst在device上但非contiguous，先将dst变成contiguous
-        // 这种情况应该很少见，但为了安全我们处理它
-        auto dst_contig = dst.contiguous();
-        return cas_npu_copy_from(self_cpu, dst_contig, non_blocking);
+        // dst 在 device 上且非 contiguous
+        // 【关键修复】这种情况需要特殊处理
+        // 先将 dst 拷贝到 CPU，使用 copy_ 更新数据，再拷贝回去
+        at::Tensor dst_cpu = at::empty(dst.sizes(), dst.options().device(at::kCPU));
+        // 先拷贝原有数据（保留可能需要的部分）
+        size_t dst_nbytes = dst.numel() * dst.element_size();
+        if (dst_nbytes > 0) {
+            auto err = casNpuMemcpy(
+                dst_cpu.data_ptr(),
+                dst.data_ptr(),
+                dst_nbytes,
+                CAS_NPU_MEMCPY_DEVICE_TO_HOST
+            );
+            TORCH_CHECK(err == CAS_NPU_SUCCESS, "Device to CPU copy failed");
+        }
+        // 使用 CPU 的 copy_ 更新数据（会正确处理 stride）
+        dst_cpu.copy_(self_cpu);
+        // 将更新后的数据拷贝回 device
+        if (dst_nbytes > 0) {
+            auto err = casNpuMemcpy(
+                dst.data_ptr(),
+                dst_cpu.data_ptr(),
+                dst_nbytes,
+                CAS_NPU_MEMCPY_HOST_TO_DEVICE
+            );
+            TORCH_CHECK(err == CAS_NPU_SUCCESS, "Host to device copy failed");
+    }
+        return dst;
     }
     
+    // self 和 dst 都是 contiguous，可以直接 memcpy
     size_t nbytes = self.numel() * self.element_size();
     
     // 同设备拷贝: Device -> Device
     if (self.device() == dst.device()) {
         if (nbytes > 0) {
             CAS_NPU_DEBUG_OP(debug::OpType::DATA_COPY, "_copy_from", " D→D %.2f KB", nbytes / 1024.0);
-            // 统计更新（不打印，避免重复）
             if (debug::debug_level() >= 2) {
                 auto& stats = debug::get_stats();
                 stats.d2d_transfers++;
@@ -470,7 +535,6 @@ at::Tensor cas_npu_copy_from(
     else if (self.is_cpu()) {
         if (nbytes > 0) {
             CAS_NPU_DEBUG_OP(debug::OpType::DATA_COPY, "_copy_from", " H→D %.2f KB", nbytes / 1024.0);
-            // 统计更新（不打印，避免重复）
             if (debug::debug_level() >= 2) {
                 auto& stats = debug::get_stats();
                 stats.h2d_transfers++;
@@ -490,7 +554,6 @@ at::Tensor cas_npu_copy_from(
     else {
         if (nbytes > 0) {
             CAS_NPU_DEBUG_OP(debug::OpType::DATA_COPY, "_copy_from", " D→H %.2f KB", nbytes / 1024.0);
-            // 统计更新（不打印，避免重复）
             if (debug::debug_level() >= 2) {
                 auto& stats = debug::get_stats();
                 stats.d2h_transfers++;
@@ -1005,6 +1068,10 @@ at::Tensor cas_npu_contiguous(
     return cpu_to_device(contiguous_cpu, self.device());
 }
 
+// ============ masked_fill_ ============
+// 注意：不提供自定义实现，直接使用 cpu_fallback
+// 之前的自定义实现反而引入了问题
+
 // ============ 操作注册 ============
 
 TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
@@ -1240,8 +1307,15 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     
     // where 和 mask 操作
     m.impl("where.self", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("masked_select", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("masked_select.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("masked_fill", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("masked_fill.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     m.impl("masked_fill.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    // inplace 版本也使用 cpu_fallback
+    // 注意：虽然可能会有内存问题，但自定义实现似乎更容易出问题
+    m.impl("masked_fill_.Scalar", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
+    m.impl("masked_fill_.Tensor", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
     
     // SGD优化器相关
     m.impl("add.out", torch::CppFunction::makeFromBoxedFunction<&cas_npu_fallback>());
