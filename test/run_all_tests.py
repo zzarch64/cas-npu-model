@@ -66,7 +66,7 @@ def print_result(name, passed, verbose=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run all CAS-NPU tests",
+        description="Run all ECHO-NPU tests",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -116,8 +116,8 @@ Examples:
     parser.add_argument(
         '--device',
         type=str,
-        default='cas_npu:0',
-        help='Device to use for tests (default: cas_npu:0)'
+        default='echo_npu:0',
+        help='Device to use for tests (default: echo_npu:0)'
     )
     
     args = parser.parse_args()
@@ -134,7 +134,7 @@ Examples:
     verbose = args.verbose > 0
     quiet = args.quiet
     
-    print_section("CAS-NPU Test Suite", "=")
+    print_section("ECHO-NPU Test Suite", "=")
     print(f"Running tests from: {TEST_DIR}")
     print(f"Unit tests: {'Yes' if run_unit else 'No'}")
     print(f"Integration tests: {'Yes' if run_integration else 'No'}")

@@ -1,8 +1,8 @@
-# CAS NPU Extension 开发日志
+# ECHO NPU Extension 开发日志
 
 ## 项目概述
 
-本项目旨在为 PyTorch 提供 CAS NPU 后端支持，实现核心算子以支持深度学习模型（特别是 LLM）在 NPU 上的运行。
+本项目旨在为 PyTorch 提供 ECHO NPU 后端支持，实现核心算子以支持深度学习模型（特别是 LLM）在 NPU 上的运行。
 
 ---
 
@@ -89,7 +89,7 @@
 │     │ CPU malloc   │ ← 为 x_cpu 分配 CPU 内存               │
 │     └──────────────┘                                        │
 │     ┌──────────────┐                                        │
-│     │ casNpuMemcpy │ ← D→H 拷贝数据                         │
+│     │ echoNpuMemcpy │ ← D→H 拷贝数据                         │
 │     └──────────────┘                                        │
 │                                                             │
 │  2. CPU 计算                                                │
@@ -100,16 +100,16 @@
 │                                                             │
 │  3. 输出传回                                                │
 │     ┌──────────────┐                                        │
-│     │ casNpuMalloc │ ← 为 result_npu 分配 NPU 内存          │
+│     │ echoNpuMalloc │ ← 为 result_npu 分配 NPU 内存          │
 │     └──────────────┘                                        │
 │     ┌──────────────┐                                        │
-│     │ casNpuMemcpy │ ← H→D 拷贝数据                         │
+│     │ echoNpuMemcpy │ ← H→D 拷贝数据                         │
 │     └──────────────┘                                        │
 │                                                             │
 │  4. 清理（函数返回后，引用计数归零时）                         │
 │     ┌──────────────┐                                        │
 │     │ CPU free     │ ← x_cpu、result_cpu 释放               │
-│     │ casNpuFree   │ ← 旧 NPU tensor 释放（如果被覆盖）       │
+│     │ echoNpuFree   │ ← 旧 NPU tensor 释放（如果被覆盖）       │
 │     └──────────────┘                                        │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -169,24 +169,24 @@
 │                      Host (CPU) Memory                       │
 └───────────────────────────┬─────────────────────────────────┘
                             │
-         casNpuMemcpy(HOST_TO_DEVICE) ↓ ↑ casNpuMemcpy(DEVICE_TO_HOST)
+         echoNpuMemcpy(HOST_TO_DEVICE) ↓ ↑ echoNpuMemcpy(DEVICE_TO_HOST)
                             │
 ┌───────────────────────────┴─────────────────────────────────┐
 │                    Device (NPU) Memory                       │
 │                                                              │
-│   casNpuMalloc() 分配    casNpuFree() 释放                   │
+│   echoNpuMalloc() 分配    echoNpuFree() 释放                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 内存拷贝方向（类似 cudaMemcpyKind）
 
 ```cpp
-enum CasNpuMemcpyKind {
-    CAS_NPU_MEMCPY_HOST_TO_HOST = 0,      // CPU -> CPU
-    CAS_NPU_MEMCPY_HOST_TO_DEVICE = 1,    // CPU -> Device
-    CAS_NPU_MEMCPY_DEVICE_TO_HOST = 2,    // Device -> CPU
-    CAS_NPU_MEMCPY_DEVICE_TO_DEVICE = 3,  // Device -> Device
-    CAS_NPU_MEMCPY_DEFAULT = 4            // 自动检测
+enum EchoNpuMemcpyKind {
+    ECHO_NPU_MEMCPY_HOST_TO_HOST = 0,      // CPU -> CPU
+    ECHO_NPU_MEMCPY_HOST_TO_DEVICE = 1,    // CPU -> Device
+    ECHO_NPU_MEMCPY_DEVICE_TO_HOST = 2,    // Device -> CPU
+    ECHO_NPU_MEMCPY_DEVICE_TO_DEVICE = 3,  // Device -> Device
+    ECHO_NPU_MEMCPY_DEFAULT = 4            // 自动检测
 };
 ```
 
@@ -202,7 +202,7 @@ enum CasNpuMemcpyKind {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  PyTorch 算子层 (backend/cas_npu_ops.cpp)                    │
+│  PyTorch 算子层 (backend/echo_npu_ops.cpp)                    │
 │  - NPU 原生实现：直接调用 Runtime API                         │
 │  - CPU Fallback：通过 at::native::cpu_fallback 自动处理      │
 │  - View 操作：仅修改 tensor metadata                         │
@@ -210,9 +210,9 @@ enum CasNpuMemcpyKind {
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  NPU Runtime API (runtime/cas_npu_runtime.h)                │
-│  - 内存管理：casNpuMalloc, casNpuFree, casNpuMemcpy         │
-│  - 计算算子：casNpuMatMul, casNpuAddTensor, ...             │
+│  NPU Runtime API (runtime/echo_npu_runtime.h)                │
+│  - 内存管理：echoNpuMalloc, echoNpuFree, echoNpuMemcpy         │
+│  - 计算算子：echoNpuMatMul, echoNpuAddTensor, ...             │
 └───────────────────────┬─────────────────────────────────────┘
                         │
                         ▼
@@ -241,9 +241,9 @@ enum CasNpuMemcpyKind {
 
 | 算子 | Runtime API | 用途 | 状态 |
 |-----|-------------|------|------|
-| `mm` | `casNpuMatMul` | Linear 层、投影层 | ✅ 已实现 |
-| `bmm` | `casNpuBatchMatMul` | Attention (Q@K^T, scores@V) | ✅ 已实现 |
-| `add.Tensor` | `casNpuAddTensor` | 残差连接、偏置加法 | ✅ 已实现 |
+| `mm` | `echoNpuMatMul` | Linear 层、投影层 | ✅ 已实现 |
+| `bmm` | `echoNpuBatchMatMul` | Attention (Q@K^T, scores@V) | ✅ 已实现 |
+| `add.Tensor` | `echoNpuAddTensor` | 残差连接、偏置加法 | ✅ 已实现 |
 
 ### ⚠️ CPU Fallback 实现（需优化为 NPU 原生）
 
@@ -252,45 +252,45 @@ enum CasNpuMemcpyKind {
 #### RMSNorm 相关（高优先级）
 | 算子 | 待实现 Runtime API | 用途 | 调用频率 |
 |-----|-------------------|------|---------|
-| `rsqrt` | `casNpuRsqrt` | 1/sqrt(x)，RMSNorm 核心 | 每层 2 次 |
-| `pow.Tensor_Scalar` | `casNpuPow` | x^2，计算方差 | 每层 2 次 |
-| `mean.dim` | `casNpuMean` | 维度均值 | 每层 2 次 |
+| `rsqrt` | `echoNpuRsqrt` | 1/sqrt(x)，RMSNorm 核心 | 每层 2 次 |
+| `pow.Tensor_Scalar` | `echoNpuPow` | x^2，计算方差 | 每层 2 次 |
+| `mean.dim` | `echoNpuMean` | 维度均值 | 每层 2 次 |
 
 #### Rotary Embedding 相关（高优先级）
 | 算子 | 待实现 Runtime API | 用途 | 调用频率 |
 |-----|-------------------|------|---------|
-| `cos` | `casNpuCos` | 位置编码 | 每层 1 次 |
-| `sin` | `casNpuSin` | 位置编码 | 每层 1 次 |
+| `cos` | `echoNpuCos` | 位置编码 | 每层 1 次 |
+| `sin` | `echoNpuSin` | 位置编码 | 每层 1 次 |
 
 #### 基础数学运算（中优先级）
 | 算子 | 待实现 Runtime API | 用途 | 调用频率 |
 |-----|-------------------|------|---------|
-| `mul.Tensor` | `casNpuMulTensor` | 逐元素乘法 | 高 |
-| `mul.Scalar` | `casNpuMulScalar` | 标量乘法 | 高 |
-| `add.Scalar` | `casNpuAddScalar` | 标量加法 | 中 |
-| `sub.Tensor` | `casNpuSubTensor` | 减法 | 低 |
-| `div.Tensor` | `casNpuDivTensor` | 除法 | 低 |
-| `neg` | `casNpuNeg` | 取负 | 低 |
-| `sqrt` | `casNpuSqrt` | 平方根 | 低 |
+| `mul.Tensor` | `echoNpuMulTensor` | 逐元素乘法 | 高 |
+| `mul.Scalar` | `echoNpuMulScalar` | 标量乘法 | 高 |
+| `add.Scalar` | `echoNpuAddScalar` | 标量加法 | 中 |
+| `sub.Tensor` | `echoNpuSubTensor` | 减法 | 低 |
+| `div.Tensor` | `echoNpuDivTensor` | 除法 | 低 |
+| `neg` | `echoNpuNeg` | 取负 | 低 |
+| `sqrt` | `echoNpuSqrt` | 平方根 | 低 |
 
 #### 激活函数（高优先级）
 | 算子 | 待实现 Runtime API | 用途 | 调用频率 |
 |-----|-------------------|------|---------|
-| `silu` | `casNpuSiLU` | SiLU 激活 (FFN) | 每层 1 次 |
+| `silu` | `echoNpuSiLU` | SiLU 激活 (FFN) | 每层 1 次 |
 
 #### Attention 相关（高优先级）
 | 算子 | 待实现 Runtime API | 用途 | 调用频率 |
 |-----|-------------------|------|---------|
-| `softmax.int` | `casNpuSoftmax` | Attention 归一化 | 每层 1 次 |
-| `scaled_dot_product_attention` | `casNpuSDPA` | 融合 Attention | 每层 1 次 |
+| `softmax.int` | `echoNpuSoftmax` | Attention 归一化 | 每层 1 次 |
+| `scaled_dot_product_attention` | `echoNpuSDPA` | 融合 Attention | 每层 1 次 |
 
 #### 其他（低优先级）
 | 算子 | 待实现 Runtime API | 用途 | 调用频率 |
 |-----|-------------------|------|---------|
-| `embedding` | `casNpuEmbedding` | Token 嵌入 | 仅输入层 |
-| `cat` | `casNpuCat` | KV Cache 拼接 | 每层 2 次 |
-| `clone` | `casNpuClone` | 张量复制 | 低 |
-| `contiguous` | `casNpuContiguous` | 内存连续化 | 低 |
+| `embedding` | `echoNpuEmbedding` | Token 嵌入 | 仅输入层 |
+| `cat` | `echoNpuCat` | KV Cache 拼接 | 每层 2 次 |
+| `clone` | `echoNpuClone` | 张量复制 | 低 |
+| `contiguous` | `echoNpuContiguous` | 内存连续化 | 低 |
 
 ### ✅ View 操作（无需优化）
 
@@ -321,7 +321,7 @@ enum CasNpuMemcpyKind {
 `contiguous()` 保留了自定义实现而非使用 `cpu_fallback`，原因是可以优化"已经连续"的常见情况：
 
 ```cpp
-at::Tensor cas_npu_contiguous(const at::Tensor& self, at::MemoryFormat memory_format) {
+at::Tensor echo_npu_contiguous(const at::Tensor& self, at::MemoryFormat memory_format) {
     // 如果已经是 contiguous 的，直接返回（零开销）
     if (self.is_contiguous(memory_format)) {
         return self;  // ← 无需任何拷贝！
@@ -378,24 +378,24 @@ at::Tensor cas_npu_contiguous(const at::Tensor& self, at::MemoryFormat memory_fo
 ## 开发计划
 
 ### Phase 1: 核心矩阵运算 ✅ 已完成
-- [x] MM (矩阵乘法) - `casNpuMatMul`
-- [x] BMM (批量矩阵乘法) - `casNpuBatchMatMul`
-- [x] Add (张量加法) - `casNpuAddTensor`
-- [x] 显式 Copy 内存模型 - `casNpuMemcpy` with direction
+- [x] MM (矩阵乘法) - `echoNpuMatMul`
+- [x] BMM (批量矩阵乘法) - `echoNpuBatchMatMul`
+- [x] Add (张量加法) - `echoNpuAddTensor`
+- [x] 显式 Copy 内存模型 - `echoNpuMemcpy` with direction
 
 ### Phase 2: RMSNorm 原生实现 ⏳ 进行中
-- [ ] `casNpuRsqrt` - rsqrt
-- [ ] `casNpuPow` - pow
-- [ ] `casNpuMean` - mean.dim
-- [ ] `casNpuMulTensor` / `casNpuMulScalar` - mul
+- [ ] `echoNpuRsqrt` - rsqrt
+- [ ] `echoNpuPow` - pow
+- [ ] `echoNpuMean` - mean.dim
+- [ ] `echoNpuMulTensor` / `echoNpuMulScalar` - mul
 
 ### Phase 3: 激活函数 & 位置编码
-- [ ] `casNpuSiLU` - silu 激活
-- [ ] `casNpuCos` / `casNpuSin` - Rotary Embedding
+- [ ] `echoNpuSiLU` - silu 激活
+- [ ] `echoNpuCos` / `echoNpuSin` - Rotary Embedding
 
 ### Phase 4: Attention 优化
-- [ ] `casNpuSoftmax` - softmax
-- [ ] `casNpuSDPA` - Scaled Dot-Product Attention（融合算子）
+- [ ] `echoNpuSoftmax` - softmax
+- [ ] `echoNpuSDPA` - Scaled Dot-Product Attention（融合算子）
 
 ### Phase 5: 其他算子 & 性能优化
 - [ ] Embedding
@@ -413,8 +413,8 @@ at::Tensor cas_npu_contiguous(const at::Tensor& self, at::MemoryFormat memory_fo
 - [ ] 设计 NPU 物理地址空间布局
 - [ ] 实现物理地址分配器 (PhysicalMemoryAllocator)
 - [ ] 实现 RAM 模拟器 (SimulatedRAM)
-- [ ] 修改 casNpuMalloc/Free 返回物理地址
-- [ ] 修改 casNpuMemcpy 支持物理地址访存
+- [ ] 修改 echoNpuMalloc/Free 返回物理地址
+- [ ] 修改 echoNpuMemcpy 支持物理地址访存
 - [ ] 验证现有算子在物理内存模型下正确性
 
 ### Phase 8: RTL Model 后端 (Verilator) 🚧 待开发
@@ -426,7 +426,7 @@ at::Tensor cas_npu_contiguous(const at::Tensor& self, at::MemoryFormat memory_fo
 - [ ] 验证基础算子 (mm, add)
 
 ### Phase 9: 编译后端切换 🚧 待开发
-- [ ] 重构 setup.py 支持 CAS_NPU_BACKEND 环境变量
+- [ ] 重构 setup.py 支持 ECHO_NPU_BACKEND 环境变量
 - [ ] 添加 CMakeLists.txt（可选）
 - [ ] 定义 Backend 抽象接口 (backend_interface.h)
 - [ ] 重构 cmodel 为 CModelBackend
@@ -449,13 +449,13 @@ at::Tensor cas_npu_contiguous(const at::Tensor& self, at::MemoryFormat memory_fo
 
 ```bash
 # 级别 1：显示算子类型
-CAS_NPU_DEBUG_LEVEL=1 python your_script.py
+ECHO_NPU_DEBUG_LEVEL=1 python your_script.py
 
 # 级别 2：显示算子类型 + 数据传输
-CAS_NPU_DEBUG_LEVEL=2 python your_script.py
+ECHO_NPU_DEBUG_LEVEL=2 python your_script.py
 
 # 级别 3：显示算子类型 + 数据传输 + Runtime 详情
-CAS_NPU_DEBUG_LEVEL=3 python your_script.py
+ECHO_NPU_DEBUG_LEVEL=3 python your_script.py
 ```
 
 输出格式：
@@ -490,7 +490,7 @@ python test/test_qwen0.5B.py
 python test/test_custom_ops.py
 
 # 带调试输出运行
-CAS_NPU_DEBUG_LEVEL=2 python test/test_lenet.py
+ECHO_NPU_DEBUG_LEVEL=2 python test/test_lenet.py
 ```
 
 ---
@@ -499,13 +499,13 @@ CAS_NPU_DEBUG_LEVEL=2 python test/test_lenet.py
 
 | 文件 | 说明 |
 |-----|------|
-| `runtime/cas_npu_runtime.h` | Runtime API 声明 |
-| `runtime/cas_npu_debug.h` | 调试系统头文件 |
+| `runtime/echo_npu_runtime.h` | Runtime API 声明 |
+| `runtime/echo_npu_debug.h` | 调试系统头文件 |
 | `runtime/cmodel/simulator.cpp` | cmodel CPU 模拟实现 |
 | `runtime/fpga/simulator.cpp` | FPGA 实现（待完善） |
-| `backend/cas_npu_ops.cpp` | PyTorch 算子注册 |
-| `backend/cas_npu_allocator.cpp` | 内存分配器 |
-| `cas_npu/debug.py` | Python 调试接口 |
+| `backend/echo_npu_ops.cpp` | PyTorch 算子注册 |
+| `backend/echo_npu_allocator.cpp` | 内存分配器 |
+| `echo_npu/debug.py` | Python 调试接口 |
 | `test/test_qwen0.5B.py` | Qwen 模型测试 |
 | `test/test_lenet.py` | LeNet 模型测试 |
 
@@ -515,7 +515,7 @@ CAS_NPU_DEBUG_LEVEL=2 python test/test_lenet.py
 
 ### 需求背景
 
-当前 CAS-NPU 仅支持推理（前向传播），要实现 LLM 的 LoRA 微调，需要支持：
+当前 ECHO-NPU 仅支持推理（前向传播），要实现 LLM 的 LoRA 微调，需要支持：
 
 1. **反向传播（Backward）**：计算梯度
 2. **参数更新（Optimizer）**：AdamW 等优化器
@@ -623,14 +623,14 @@ Phase 6.4: 性能优化
 
 ```cpp
 // 当前实现 (runtime/cmodel/simulator.cpp)
-CasNpuError casNpuMalloc(void** ptr, size_t size) {
+EchoNpuError echoNpuMalloc(void** ptr, size_t size) {
     *ptr = malloc(size);  // ← 返回 CPU 虚拟地址
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKind kind) {
+EchoNpuError echoNpuMemcpy(void* dst, const void* src, size_t size, EchoNpuMemcpyKind kind) {
     memcpy(dst, src, size);  // ← 直接使用 CPU memcpy
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 ```
 
@@ -661,7 +661,7 @@ NPU Physical Address Map (示例，可配置)
 ```cpp
 // runtime/memory/physical_memory.h
 
-namespace cas_npu {
+namespace echo_npu {
 
 // NPU 物理地址类型
 using PhysAddr = uint64_t;
@@ -734,7 +734,7 @@ private:
     PhysicalMemoryAllocator allocator_;
 };
 
-} // namespace cas_npu
+} // namespace echo_npu
 ```
 
 #### 修改后的 Runtime API 实现
@@ -742,39 +742,39 @@ private:
 ```cpp
 // runtime/cmodel/simulator.cpp (修改后)
 
-CasNpuError casNpuMalloc(void** ptr, size_t size) {
+EchoNpuError echoNpuMalloc(void** ptr, size_t size) {
     auto& mm = MemoryManager::instance();
     PhysAddr paddr = mm.allocate(size);
     if (paddr == 0) {
-        return CAS_NPU_ERROR_OUT_OF_MEMORY;
+        return ECHO_NPU_ERROR_OUT_OF_MEMORY;
     }
     // 返回物理地址（强制转换为指针形式，调用者需知道这是物理地址）
     *ptr = reinterpret_cast<void*>(paddr);
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKind kind) {
+EchoNpuError echoNpuMemcpy(void* dst, const void* src, size_t size, EchoNpuMemcpyKind kind) {
     auto& mm = MemoryManager::instance();
     
     switch (kind) {
-        case CAS_NPU_MEMCPY_HOST_TO_DEVICE:
+        case ECHO_NPU_MEMCPY_HOST_TO_DEVICE:
             mm.copyHostToDevice(reinterpret_cast<PhysAddr>(dst), src, size);
             break;
-        case CAS_NPU_MEMCPY_DEVICE_TO_HOST:
+        case ECHO_NPU_MEMCPY_DEVICE_TO_HOST:
             mm.copyDeviceToHost(const_cast<void*>(dst), 
                                reinterpret_cast<PhysAddr>(src), size);
             break;
-        case CAS_NPU_MEMCPY_DEVICE_TO_DEVICE:
+        case ECHO_NPU_MEMCPY_DEVICE_TO_DEVICE:
             mm.copyDeviceToDevice(reinterpret_cast<PhysAddr>(dst),
                                   reinterpret_cast<PhysAddr>(src), size);
             break;
         // ...
     }
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
 // 算子实现需要修改为使用物理地址访存
-CasNpuError casNpuAddTensor(float* output, const float* input1,
+EchoNpuError echoNpuAddTensor(float* output, const float* input1,
                             const float* input2, size_t num_elements, float alpha) {
     auto& ram = MemoryManager::instance().getRAM();
     PhysAddr out_addr = reinterpret_cast<PhysAddr>(output);
@@ -789,15 +789,15 @@ CasNpuError casNpuAddTensor(float* output, const float* input1,
         result = v1 + alpha * v2;
         ram.write(out_addr + i * sizeof(float), &result, sizeof(float));
     }
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 ```
 
 ### 迁移计划
 
 1. **Phase 1**：实现 `SimulatedRAM` 和 `PhysicalMemoryAllocator`
-2. **Phase 2**：实现 `MemoryManager`，修改 `casNpuMalloc`/`casNpuFree`
-3. **Phase 3**：修改 `casNpuMemcpy` 支持物理地址
+2. **Phase 2**：实现 `MemoryManager`，修改 `echoNpuMalloc`/`echoNpuFree`
+3. **Phase 3**：修改 `echoNpuMemcpy` 支持物理地址
 4. **Phase 4**：逐个修改算子实现使用物理地址访存
 5. **Phase 5**：验证所有现有测试通过
 
@@ -814,12 +814,12 @@ CasNpuError casNpuAddTensor(float* output, const float* input1,
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  PyTorch Backend Layer                                          │
-│  casNpuMatMul(), casNpuAddTensor(), ...                        │
+│  echoNpuMatMul(), echoNpuAddTensor(), ...                        │
 ├─────────────────────────────────────────────────────────────────┤
 │  RTL Model Backend (runtime/rtlmodel/)                          │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │  RTLModelBackend : CasNpuBackend                         │   │
+│  │  RTLModelBackend : EchoNpuBackend                         │   │
 │  │  - 实现所有 Runtime API                                   │   │
 │  │  - 将 API 调用转换为命令包                                 │   │
 │  └─────────────────────────────────────────────────────────┘   │
@@ -853,7 +853,7 @@ CasNpuError casNpuAddTensor(float* output, const float* input1,
 ```cpp
 // runtime/rtlmodel/command_packet.h
 
-namespace cas_npu {
+namespace echo_npu {
 
 // 操作码定义
 enum class NpuOpcode : uint32_t {
@@ -886,7 +886,7 @@ struct NpuStatus {
     uint64_t cycle_count;
 };
 
-} // namespace cas_npu
+} // namespace echo_npu
 ```
 
 ### AXI 驱动实现
@@ -894,7 +894,7 @@ struct NpuStatus {
 ```cpp
 // runtime/rtlmodel/axi_driver.h
 
-namespace cas_npu {
+namespace echo_npu {
 
 class AxiDriver {
 public:
@@ -924,7 +924,7 @@ private:
     void tick();
 };
 
-} // namespace cas_npu
+} // namespace echo_npu
 ```
 
 ### Verilator Wrapper
@@ -932,7 +932,7 @@ private:
 ```cpp
 // runtime/rtlmodel/verilator_wrapper.h
 
-namespace cas_npu {
+namespace echo_npu {
 
 class VerilatorWrapper {
 public:
@@ -964,7 +964,7 @@ private:
     uint64_t cycle_count_ = 0;
 };
 
-} // namespace cas_npu
+} // namespace echo_npu
 ```
 
 ### RTL Model 后端实现
@@ -972,11 +972,11 @@ private:
 ```cpp
 // runtime/rtlmodel/backend.cpp
 
-class RTLModelBackend : public CasNpuBackend {
+class RTLModelBackend : public EchoNpuBackend {
 public:
     const char* name() const override { return "rtlmodel"; }
     
-    CasNpuError matMul(float* output, const float* input1, const float* input2,
+    EchoNpuError matMul(float* output, const float* input1, const float* input2,
                        int64_t M, int64_t K, int64_t N) override {
         // 1. 构造命令包
         NpuCommandPacket cmd = {};
@@ -997,10 +997,10 @@ public:
         // 4. 检查状态
         auto status = wrapper_.getAxiDriver().getStatus();
         if (status.state == 3) {  // ERROR
-            return CAS_NPU_ERROR_UNKNOWN;
+            return ECHO_NPU_ERROR_UNKNOWN;
         }
         
-        return CAS_NPU_SUCCESS;
+        return ECHO_NPU_SUCCESS;
     }
     
     // ... 其他算子实现类似
@@ -1020,7 +1020,7 @@ verilator --cc --exe --build \
     -o obj_dir/Vnpu_top
 
 # 2. 构建 Python 扩展（包含 RTL Model）
-CAS_NPU_BACKEND=rtlmodel python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=rtlmodel python setup.py build_ext --inplace
 ```
 
 ### 目录结构（新增）
@@ -1049,7 +1049,7 @@ runtime/
 
 ### 目标
 
-通过环境变量 `CAS_NPU_BACKEND` 在编译时选择不同的后端实现。
+通过环境变量 `ECHO_NPU_BACKEND` 在编译时选择不同的后端实现。
 
 ### setup.py 改进
 
@@ -1061,23 +1061,23 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 # 读取后端选择，默认 cmodel
-backend = os.environ.get('CAS_NPU_BACKEND', 'cmodel')
+backend = os.environ.get('ECHO_NPU_BACKEND', 'cmodel')
 valid_backends = ['cmodel', 'rtlmodel', 'fpga', 'asic']
 
 if backend not in valid_backends:
-    print(f"Warning: Invalid CAS_NPU_BACKEND='{backend}', using 'cmodel'")
+    print(f"Warning: Invalid ECHO_NPU_BACKEND='{backend}', using 'cmodel'")
     backend = 'cmodel'
 
-print(f"Building CAS-NPU with backend: {backend}")
+print(f"Building ECHO-NPU with backend: {backend}")
 
 # 通用源文件
 common_sources = [
-    'backend/cas_npu_allocator.cpp',
-    'backend/cas_npu_guard.cpp',
-    'backend/cas_npu_hooks.cpp',
-    'backend/cas_npu_ops.cpp',
-    'backend/cas_npu_module.cpp',
-    'backend/cas_npu_custom_ops_example.cpp',
+    'backend/echo_npu_allocator.cpp',
+    'backend/echo_npu_guard.cpp',
+    'backend/echo_npu_hooks.cpp',
+    'backend/echo_npu_ops.cpp',
+    'backend/echo_npu_module.cpp',
+    'backend/echo_npu_custom_ops_example.cpp',
     'runtime/memory/physical_memory.cpp',  # 新增：物理内存模型
 ]
 
@@ -1117,10 +1117,10 @@ backend_link_args = {
 
 # 后端特定宏定义
 backend_define_macros = {
-    'cmodel':   [('CAS_NPU_BACKEND_CMODEL', '1')],
-    'rtlmodel': [('CAS_NPU_BACKEND_RTLMODEL', '1')],
-    'fpga':     [('CAS_NPU_BACKEND_FPGA', '1')],
-    'asic':     [('CAS_NPU_BACKEND_ASIC', '1')],
+    'cmodel':   [('ECHO_NPU_BACKEND_CMODEL', '1')],
+    'rtlmodel': [('ECHO_NPU_BACKEND_RTLMODEL', '1')],
+    'fpga':     [('ECHO_NPU_BACKEND_FPGA', '1')],
+    'asic':     [('ECHO_NPU_BACKEND_ASIC', '1')],
 }
 
 sources = common_sources + backend_sources[backend]
@@ -1130,11 +1130,11 @@ extra_compile_args = {
 }
 
 setup(
-    name='cas_npu',
+    name='echo_npu',
     version='0.1.0',
     ext_modules=[
         CppExtension(
-            name='cas_npu._cas_npu_C',
+            name='echo_npu._echo_npu_C',
             sources=sources,
             include_dirs=['.', 'backend', 'runtime'],
             extra_compile_args=extra_compile_args,
@@ -1153,30 +1153,30 @@ setup(
 python setup.py build_ext --inplace
 
 # 或显式指定
-CAS_NPU_BACKEND=cmodel python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=cmodel python setup.py build_ext --inplace
 
 # RTL Model 后端
 # 注意：需要先用 Verilator 编译 RTL
 cd runtime/rtlmodel && make -f Makefile.verilator && cd ../..
-CAS_NPU_BACKEND=rtlmodel python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=rtlmodel python setup.py build_ext --inplace
 
 # FPGA 后端
-CAS_NPU_BACKEND=fpga python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=fpga python setup.py build_ext --inplace
 
 # ASIC 后端
-CAS_NPU_BACKEND=asic python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=asic python setup.py build_ext --inplace
 ```
 
 ### 运行时后端查询
 
 ```python
-import cas_npu
+import echo_npu
 
 # 查询当前后端
-print(cas_npu.get_backend_name())  # "cmodel" / "rtlmodel" / ...
+print(echo_npu.get_backend_name())  # "cmodel" / "rtlmodel" / ...
 
 # 查询后端信息
-print(cas_npu.get_backend_info())
+print(echo_npu.get_backend_info())
 # {
 #     "name": "rtlmodel",
 #     "version": "0.1.0",
@@ -1195,8 +1195,8 @@ print(cas_npu.get_backend_info())
 ```
 当前架构（问题）：
 ┌─────────────────────────────────────────────────────────────────┐
-│  runtime/cas_npu_runtime.h                                      │
-│  - 所有 API 声明 (casNpuMalloc, casNpuMatMul, ...)              │
+│  runtime/echo_npu_runtime.h                                      │
+│  - 所有 API 声明 (echoNpuMalloc, echoNpuMatMul, ...)              │
 │  - 没有抽象层，直接声明具体函数                                    │
 └───────────────────────┬─────────────────────────────────────────┘
                         │ 编译时选择一个
@@ -1220,12 +1220,12 @@ print(cas_npu.get_backend_info())
 ```
 目标架构（解耦）：
 ┌─────────────────────────────────────────────────────────────────┐
-│  runtime/cas_npu_runtime.h                                      │
+│  runtime/echo_npu_runtime.h                                      │
 │  - 对外统一接口（不变）                                           │
 │  - 内部委托给当前后端                                             │
 ├─────────────────────────────────────────────────────────────────┤
 │  runtime/backend_interface.h  [NEW]                             │
-│  - CasNpuBackend 抽象基类                                        │
+│  - EchoNpuBackend 抽象基类                                        │
 │  - 纯虚函数定义所有后端需要实现的接口                               │
 ├─────────────────────────────────────────────────────────────────┤
 │  runtime/backend_manager.h  [NEW]                               │
@@ -1240,7 +1240,7 @@ print(cas_npu.get_backend_info())
 │ cmodel/        │ │ fpga/          │ │ asic/          │
 │ backend.cpp    │ │ backend.cpp    │ │ backend.cpp    │
 │ CModelBackend  │ │ FPGABackend    │ │ ASICBackend    │
-│ : CasNpuBackend│ │ : CasNpuBackend│ │ : CasNpuBackend│
+│ : EchoNpuBackend│ │ : EchoNpuBackend│ │ : EchoNpuBackend│
 └────────────────┘ └────────────────┘ └────────────────┘
 ```
 
@@ -1248,36 +1248,36 @@ print(cas_npu.get_backend_info())
 
 ```cpp
 // runtime/backend_interface.h
-namespace cas_npu {
+namespace echo_npu {
 
-class CasNpuBackend {
+class EchoNpuBackend {
 public:
-    virtual ~CasNpuBackend() = default;
+    virtual ~EchoNpuBackend() = default;
     
     // 后端信息
     virtual const char* name() const = 0;
     virtual const char* version() const = 0;
     
     // 设备管理
-    virtual CasNpuError getDeviceCount(int* count) = 0;
-    virtual CasNpuError setDevice(int device) = 0;
-    virtual CasNpuError getDevice(int* device) = 0;
+    virtual EchoNpuError getDeviceCount(int* count) = 0;
+    virtual EchoNpuError setDevice(int device) = 0;
+    virtual EchoNpuError getDevice(int* device) = 0;
     
     // 内存管理
-    virtual CasNpuError malloc(void** ptr, size_t size) = 0;
-    virtual CasNpuError free(void* ptr) = 0;
-    virtual CasNpuError memcpy(void* dst, const void* src, 
-                               size_t size, CasNpuMemcpyKind kind) = 0;
-    virtual CasNpuError memset(void* ptr, int value, size_t size) = 0;
+    virtual EchoNpuError malloc(void** ptr, size_t size) = 0;
+    virtual EchoNpuError free(void* ptr) = 0;
+    virtual EchoNpuError memcpy(void* dst, const void* src, 
+                               size_t size, EchoNpuMemcpyKind kind) = 0;
+    virtual EchoNpuError memset(void* ptr, int value, size_t size) = 0;
     
     // 计算算子
-    virtual CasNpuError addTensor(float* output, const float* input1,
+    virtual EchoNpuError addTensor(float* output, const float* input1,
                                   const float* input2, size_t num_elements,
                                   float alpha = 1.0f) = 0;
-    virtual CasNpuError matMul(float* output, const float* input1,
+    virtual EchoNpuError matMul(float* output, const float* input1,
                                const float* input2,
                                int64_t M, int64_t K, int64_t N) = 0;
-    virtual CasNpuError batchMatMul(float* output, const float* input1,
+    virtual EchoNpuError batchMatMul(float* output, const float* input1,
                                     const float* input2,
                                     int64_t B, int64_t M, int64_t K, int64_t N) = 0;
     // ... 更多算子
@@ -1289,17 +1289,17 @@ public:
     static BackendManager& instance();
     
     void registerBackend(const std::string& name, 
-                        std::unique_ptr<CasNpuBackend> backend);
-    CasNpuBackend* getBackend(const std::string& name = "");
+                        std::unique_ptr<EchoNpuBackend> backend);
+    EchoNpuBackend* getBackend(const std::string& name = "");
     void setDefaultBackend(const std::string& name);
     std::vector<std::string> listBackends() const;
     
 private:
-    std::unordered_map<std::string, std::unique_ptr<CasNpuBackend>> backends_;
+    std::unordered_map<std::string, std::unique_ptr<EchoNpuBackend>> backends_;
     std::string defaultBackend_ = "cmodel";
 };
 
-} // namespace cas_npu
+} // namespace echo_npu
 ```
 
 ### 迁移计划
@@ -1307,7 +1307,7 @@ private:
 1. **Phase 1**：创建接口定义（不破坏现有代码）
 2. **Phase 2**：将 cmodel 实现适配为 CModelBackend
 3. **Phase 3**：将 fpga 实现适配为 FPGABackend
-4. **Phase 4**：修改 `cas_npu_runtime.h` 使用后端管理器
+4. **Phase 4**：修改 `echo_npu_runtime.h` 使用后端管理器
 5. **Phase 5**：添加 Python 绑定支持后端切换
 6. **Phase 6**：创建 asic 后端框架
 

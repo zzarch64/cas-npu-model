@@ -3,9 +3,9 @@
 LeNet 神经网络推理示例 - 验证 CPU Fallback 机制
 
 这个示例展示了：
-1. 在 cas_npu 设备上运行完整的神经网络（前向传播）
+1. 在 echo_npu 设备上运行完整的神经网络（前向传播）
 2. 大部分操作会 fallback 到 CPU 执行
-3. add 操作会使用我们实现的 cas_npu 版本
+3. add 操作会使用我们实现的 echo_npu 版本
 
 运行方式:
     python examples/lenet_inference.py
@@ -17,22 +17,22 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 导入cas_npu扩展
-import cas_npu
+# 导入echo_npu扩展
+import echo_npu
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 print(f"PyTorch version: {torch.__version__}")
-print(f"CAS-NPU available: {torch.cas_npu.is_available()}")
+print(f"ECHO-NPU available: {torch.echo_npu.is_available()}")
 print()
 
 
 # ============ 注册CPU Fallback操作 ============
 
 def _to_cpu(tensor):
-    if isinstance(tensor, torch.Tensor) and tensor.device.type == 'cas_npu':
+    if isinstance(tensor, torch.Tensor) and tensor.device.type == 'echo_npu':
         return tensor.cpu()
     return tensor
 
@@ -141,13 +141,13 @@ def test_lenet_on_cpu():
     return output
 
 
-def test_lenet_on_cas_npu():
-    """在cas_npu设备上运行LeNet"""
+def test_lenet_on_echo_npu():
+    """在echo_npu设备上运行LeNet"""
     print("=" * 60)
-    print("Test 2: LeNet on CAS-NPU (with CPU Fallback)")
+    print("Test 2: LeNet on ECHO-NPU (with CPU Fallback)")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     torch.manual_seed(42)
     model = LeNet().to(device)
@@ -165,14 +165,14 @@ def test_lenet_on_cas_npu():
     print(f"Output shape: {output.shape}, device: {output.device}")
     print(f"Output sample: {output.cpu()[0, :5]}")  # 前5个输出
     print(f"Time: {elapsed*1000:.2f} ms")
-    print("✓ CAS-NPU forward pass completed\n")
+    print("✓ ECHO-NPU forward pass completed\n")
     return output.cpu()
 
 
 def test_output_consistency():
-    """验证CPU和CAS-NPU输出一致"""
+    """验证CPU和ECHO-NPU输出一致"""
     print("=" * 60)
-    print("Test 3: Verify CPU vs CAS-NPU Output Consistency")
+    print("Test 3: Verify CPU vs ECHO-NPU Output Consistency")
     print("=" * 60)
     
     torch.manual_seed(42)
@@ -180,15 +180,15 @@ def test_output_consistency():
     x_cpu = torch.randn(2, 1, 28, 28)
     
     torch.manual_seed(42)
-    model_npu = LeNet().to('cas_npu:0')
-    x_npu = torch.randn(2, 1, 28, 28).to('cas_npu:0')
+    model_npu = LeNet().to('echo_npu:0')
+    x_npu = torch.randn(2, 1, 28, 28).to('echo_npu:0')
     
     with torch.no_grad():
         out_cpu = model_cpu(x_cpu)
         out_npu = model_npu(x_npu).cpu()
     
     print(f"CPU output:\n{out_cpu}")
-    print(f"CAS-NPU output:\n{out_npu}")
+    print(f"ECHO-NPU output:\n{out_npu}")
     
     max_diff = (out_cpu - out_npu).abs().max().item()
     print(f"\nMax difference: {max_diff:.2e}")
@@ -201,12 +201,12 @@ def test_output_consistency():
 
 
 def test_add_operation():
-    """验证add操作使用cas_npu实现"""
+    """验证add操作使用echo_npu实现"""
     print("=" * 60)
-    print("Test 4: Verify add.Tensor on CAS-NPU")
+    print("Test 4: Verify add.Tensor on ECHO-NPU")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     a = torch.tensor([[1.0, 2.0], [3.0, 4.0]]).to(device)
     b = torch.tensor([[5.0, 6.0], [7.0, 8.0]]).to(device)
@@ -214,7 +214,7 @@ def test_add_operation():
     print(f"a:\n{a.cpu()}")
     print(f"b:\n{b.cpu()}")
     
-    c = a + b  # 使用我们实现的cas_npu add
+    c = a + b  # 使用我们实现的echo_npu add
     print(f"a + b =\n{c.cpu()}")
     
     expected = torch.tensor([[6.0, 8.0], [10.0, 12.0]])
@@ -225,10 +225,10 @@ def test_add_operation():
 def test_multiple_operations():
     """测试连续多个操作"""
     print("=" * 60)
-    print("Test 5: Multiple Operations on CAS-NPU")
+    print("Test 5: Multiple Operations on ECHO-NPU")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     # 创建数据
     x = torch.randn(2, 3).to(device)
@@ -238,9 +238,9 @@ def test_multiple_operations():
     print(f"y:\n{y.cpu()}")
     
     # 连续操作
-    z1 = x + y          # add (cas_npu实现)
+    z1 = x + y          # add (echo_npu实现)
     z2 = F.relu(z1)     # relu (CPU fallback)
-    z3 = z2 + x         # add (cas_npu实现)
+    z3 = z2 + x         # add (echo_npu实现)
     
     print(f"(x + y):\n{z1.cpu()}")
     print(f"relu(x + y):\n{z2.cpu()}")
@@ -251,18 +251,18 @@ def test_multiple_operations():
 
 def main():
     print("=" * 60)
-    print("LeNet Neural Network Inference Example on CAS-NPU Device")
+    print("LeNet Neural Network Inference Example on ECHO-NPU Device")
     print("=" * 60)
     print()
     print("This demonstrates:")
-    print("- LeNet forward pass on cas_npu device")
+    print("- LeNet forward pass on echo_npu device")
     print("- CPU fallback for conv2d, relu, linear, max_pool2d")
-    print("- add.Tensor using our CAS-NPU implementation")
+    print("- add.Tensor using our ECHO-NPU implementation")
     print()
     
     try:
         test_lenet_on_cpu()
-        test_lenet_on_cas_npu()
+        test_lenet_on_echo_npu()
         test_output_consistency()
         test_add_operation()
         test_multiple_operations()
@@ -273,9 +273,9 @@ def main():
         print()
         print("Summary:")
         print("- ✓ LeNet forward pass on CPU")
-        print("- ✓ LeNet forward pass on CAS-NPU")
+        print("- ✓ LeNet forward pass on ECHO-NPU")
         print("- ✓ Output consistency verified")
-        print("- ✓ add.Tensor on CAS-NPU")
+        print("- ✓ add.Tensor on ECHO-NPU")
         print("- ✓ Multiple operations chain")
         print()
         print("Note: Training (backward pass) requires more autograd support.")

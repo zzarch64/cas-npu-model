@@ -8,10 +8,10 @@
 import sys
 import os
 
-# 确保导入本地的cas_npu包
+# 确保导入本地的echo_npu包
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import cas_npu
+import echo_npu
 import torch
 import numpy as np
 
@@ -21,7 +21,7 @@ def test_custom_quantize():
     print("测试自定义量化算子")
     print("=" * 60)
     
-    device = torch.device("cas_npu:0")
+    device = torch.device("echo_npu:0")
     
     # 创建测试数据
     print("\n1. 创建测试数据")
@@ -40,9 +40,9 @@ def test_custom_quantize():
     print(f"  zero_point: {zero_point}")
     
     # 调用自定义量化算子
-    print("\n2. 调用自定义量化算子 torch.ops.cas_npu.custom_quantize")
+    print("\n2. 调用自定义量化算子 torch.ops.echo_npu.custom_quantize")
     try:
-        output = torch.ops.cas_npu.custom_quantize(input_tensor, scale, zero_point)
+        output = torch.ops.echo_npu.custom_quantize(input_tensor, scale, zero_point)
         
         print(f"输出tensor shape: {output.shape}")
         print(f"输出tensor dtype: {output.dtype}")
@@ -97,7 +97,7 @@ def test_custom_quantize_different_params():
     print("测试不同量化参数")
     print("=" * 60)
     
-    device = torch.device("cas_npu:0")
+    device = torch.device("echo_npu:0")
     
     # 测试不同的scale和zero_point
     test_cases = [
@@ -111,7 +111,7 @@ def test_custom_quantize_different_params():
         input_tensor = torch.randn(2, 2, device=device, dtype=torch.float32)
         
         try:
-            output = torch.ops.cas_npu.custom_quantize(
+            output = torch.ops.echo_npu.custom_quantize(
                 input_tensor, 
                 case["scale"], 
                 case["zero_point"]

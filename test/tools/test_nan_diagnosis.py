@@ -12,10 +12,10 @@ import torch.nn as nn
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    import cas_npu
-    print("✓ CAS-NPU extension imported successfully")
+    import echo_npu
+    print("✓ ECHO-NPU extension imported successfully")
 except ImportError as e:
-    print(f"✗ Failed to import CAS-NPU extension: {e}")
+    print(f"✗ Failed to import ECHO-NPU extension: {e}")
     sys.exit(1)
 
 def print_table(headers, rows, title=None):
@@ -48,7 +48,7 @@ def check_tensor_for_nan(tensor, name="tensor", verbose=True):
     if tensor is None:
         return False
     
-    cpu_tensor = tensor.cpu() if tensor.device.type == 'cas_npu' else tensor
+    cpu_tensor = tensor.cpu() if tensor.device.type == 'echo_npu' else tensor
     
     has_nan = torch.isnan(cpu_tensor).any().item()
     has_inf = torch.isinf(cpu_tensor).any().item()
@@ -81,7 +81,7 @@ def check_tensor_for_nan(tensor, name="tensor", verbose=True):
 
 def test_memory_initialization():
     """测试内存初始化"""
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     # 创建多个tensor，检查是否包含NaN
     rows = []
@@ -103,7 +103,7 @@ def test_memory_initialization():
 
 def test_basic_operations():
     """测试基础操作是否产生NaN"""
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     rows = []
     all_ok = True
     
@@ -146,7 +146,7 @@ def test_basic_operations():
 
 def test_linear_layer():
     """测试线性层"""
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     linear = nn.Linear(768, 3072).to(device)
     x = torch.randn(2, 10, 768, device=device)
@@ -272,7 +272,7 @@ def test_linear_layer():
 
 def test_training_step():
     """测试训练步骤"""
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     model = nn.Linear(10, 5).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)

@@ -1,17 +1,17 @@
-# CAS-NPU 示例代码
+# ECHO-NPU 示例代码
 
-本目录包含 CAS-NPU 扩展的使用示例，展示如何在真实场景中使用自定义设备。
+本目录包含 ECHO-NPU 扩展的使用示例，展示如何在真实场景中使用自定义设备。
 
 ## 📋 示例列表
 
 ### 1. `lenet_inference.py` - LeNet 推理示例
 
-**用途**: 演示如何在 CAS-NPU 设备上运行完整的神经网络推理
+**用途**: 演示如何在 ECHO-NPU 设备上运行完整的神经网络推理
 
 **特点**:
 - 实现完整的 LeNet 网络结构
 - 演示 CPU Fallback 机制（未实现的操作自动回退到 CPU）
-- 验证 add 操作使用 CAS-NPU 实现
+- 验证 add 操作使用 ECHO-NPU 实现
 
 **运行方式**:
 ```bash
@@ -19,7 +19,7 @@ python examples/lenet_inference.py
 ```
 
 **展示内容**:
-- LeNet 前向传播在 CPU 和 CAS-NPU 上的对比
+- LeNet 前向传播在 CPU 和 ECHO-NPU 上的对比
 - 输出一致性验证
 - add.Tensor 操作验证
 - 多操作链式调用
@@ -83,7 +83,7 @@ python examples/qwen_model.py --no-lora
 **前置条件**:
 - 需要安装 `transformers` 库: `pip install transformers`
 - LoRA 功能需要 `peft` 库: `pip install peft`
-- 需要实现 `mm` 和 `bmm` 算子（在 `cas_npu_ops.cpp` 中）
+- 需要实现 `mm` 和 `bmm` 算子（在 `echo_npu_ops.cpp` 中）
 
 **注意事项**:
 - 首次运行会下载模型权重（约 1GB）
@@ -139,7 +139,7 @@ python examples/qwen_model.py
 ## 💡 使用建议
 
 1. **学习顺序**: 建议按照 `lenet_inference.py` → `lenet_training.py` → `qwen_model.py` 的顺序学习
-2. **理解 CPU Fallback**: 注意观察哪些操作在 CPU 上执行，哪些在 CAS-NPU 上执行
+2. **理解 CPU Fallback**: 注意观察哪些操作在 CPU 上执行，哪些在 ECHO-NPU 上执行
 3. **调试技巧**: 如果遇到问题，可以查看 `test/` 目录下的测试文件了解详细实现
 
 ---

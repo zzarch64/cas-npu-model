@@ -4,7 +4,7 @@ Qwen 模型示例 - 验证 mm 和 bmm 算子实现
 
 这个示例展示了：
 1. 基础 mm 和 bmm 操作的使用
-2. Linear 层在 CAS-NPU 上的使用
+2. Linear 层在 ECHO-NPU 上的使用
 3. 加载 Qwen 模型并运行前向传播
 4. LoRA 微调训练示例（需要 peft 库）
 
@@ -21,17 +21,17 @@ import torch.nn as nn
 # 添加扩展路径（从test目录向上一级找到python包）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 导入cas_npu扩展
+# 导入echo_npu扩展
 try:
-    import cas_npu
-    print("✓ CAS-NPU extension imported successfully")
+    import echo_npu
+    print("✓ ECHO-NPU extension imported successfully")
 except ImportError as e:
-    print(f"✗ Failed to import CAS-NPU extension: {e}")
+    print(f"✗ Failed to import ECHO-NPU extension: {e}")
     sys.exit(1)
 
 print(f"PyTorch version: {torch.__version__}")
-print(f"CAS-NPU available: {torch.cas_npu.is_available()}")
-print(f"CAS-NPU device count: {torch.cas_npu.device_count()}")
+print(f"ECHO-NPU available: {torch.echo_npu.is_available()}")
+print(f"ECHO-NPU device count: {torch.echo_npu.device_count()}")
 print()
 
 # 检查 transformers 是否安装
@@ -59,7 +59,7 @@ def test_mm_bmm_basic():
     print("Test 1: Basic mm and bmm operations")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     # 测试 mm
     print("\nTesting mm (matrix multiplication)...")
@@ -107,7 +107,7 @@ def test_qwen_model():
     print("Test 2: Qwen0.5B Model Forward Pass")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     model_name = "Qwen/Qwen2.5-0.5B"
     
     print(f"\nLoading model: {model_name}")
@@ -196,7 +196,7 @@ def test_linear_layer():
     print("Test 3: Linear Layer (uses mm)")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     # 创建 Linear 层
     linear = nn.Linear(768, 3072).to(device)
@@ -210,7 +210,7 @@ def test_linear_layer():
     print(f"Output shape: {y.shape}")
     
     # 验证
-    assert y.device.type == 'cas_npu', f"Output should be on cas_npu device, got {y.device.type}"
+    assert y.device.type == 'echo_npu', f"Output should be on echo_npu device, got {y.device.type}"
     assert y.shape == (2, 10, 3072), f"Unexpected output shape: {y.shape}"
     
     print("  ✓ Linear layer test passed\n")
@@ -225,7 +225,7 @@ def test_lora_finetune():
         print("  ⚠ Skipping LoRA test (peft library not available)")
         return False
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     model_name = "Qwen/Qwen2.5-0.5B"
     
     print(f"\nLoading model: {model_name}")
@@ -399,8 +399,8 @@ def test_lora_finetune():
     print(f"  Input data device: {input_ids.device}")
     
     # 清理可能的内存缓存
-    if hasattr(torch.cas_npu, 'empty_cache'):
-        torch.cas_npu.empty_cache()
+    if hasattr(torch.echo_npu, 'empty_cache'):
+        torch.echo_npu.empty_cache()
     print(f"  Memory cache cleared")
     
     # 先做一个简单的前向传播测试，检查内存是否足够
@@ -415,8 +415,8 @@ def test_lora_finetune():
             )
             print(f"  ✓ Forward pass test successful (with attention_mask), output shape: {test_output.last_hidden_state.shape}")
         del test_output  # 释放内存
-        if hasattr(torch.cas_npu, 'empty_cache'):
-            torch.cas_npu.empty_cache()
+        if hasattr(torch.echo_npu, 'empty_cache'):
+            torch.echo_npu.empty_cache()
     except Exception as e:
         print(f"  ✗ Forward pass test failed: {e}")
         print("  Note: Trying without attention_mask as fallback...")
@@ -426,8 +426,8 @@ def test_lora_finetune():
                 test_output = model(input_ids=input_ids[:1])
             print(f"  ✓ Forward pass test successful (without attention_mask), output shape: {test_output.last_hidden_state.shape}")
             del test_output
-            if hasattr(torch.cas_npu, 'empty_cache'):
-                torch.cas_npu.empty_cache()
+            if hasattr(torch.echo_npu, 'empty_cache'):
+                torch.echo_npu.empty_cache()
         except Exception as e2:
             print(f"  ✗ Forward pass test failed even without attention_mask: {e2}")
             print("  Will continue with training attempt...")
@@ -440,7 +440,7 @@ def test_lora_finetune():
             optimizer.zero_grad()
             
             # 前向传播（所有计算在模型所在的设备上进行）
-            # 如果模型在 cas_npu:0，LoRA 的计算也在 cas_npu:0 上
+            # 如果模型在 echo_npu:0，LoRA 的计算也在 echo_npu:0 上
             # 使用单个样本进行训练以节省内存
             batch_input_ids = input_ids[:1]
             batch_attention_mask = attention_mask[:1]
@@ -520,8 +520,8 @@ def test_lora_finetune():
             
             # 清理中间变量以释放内存
             del outputs, hidden_states, loss
-            if hasattr(torch.cas_npu, 'empty_cache'):
-                torch.cas_npu.empty_cache()
+            if hasattr(torch.echo_npu, 'empty_cache'):
+                torch.echo_npu.empty_cache()
         
         # 打印训练表格
         print("\nTraining Progress:")
@@ -569,7 +569,7 @@ def test_lora_finetune():
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(
-        description="Qwen0.5B Model Test with CAS-NPU mm/bmm Operators",
+        description="Qwen0.5B Model Test with ECHO-NPU mm/bmm Operators",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -612,7 +612,7 @@ Examples:
             print("LoRA test disabled (peft library not available)")
     
     print("=" * 60)
-    print("Qwen0.5B Model Test with CAS-NPU mm/bmm Operators")
+    print("Qwen0.5B Model Test with ECHO-NPU mm/bmm Operators")
     print("=" * 60)
     print()
     

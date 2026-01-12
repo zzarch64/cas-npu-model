@@ -127,26 +127,26 @@ python test_asan.py
 ```
 ==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x7f8b8c000000
 READ of size 4 at 0x7f8b8c000000 thread T0
-    #0 0x4e8f123 in casNpuMemcpy simulator.cpp:140
-    #1 0x4e8f456 in cas_npu_copy_from cas_npu_ops.cpp:459
-    #2 0x4e8f789 in cas_npu_masked_fill_Scalar cas_npu_ops.cpp:1022
+    #0 0x4e8f123 in echoNpuMemcpy simulator.cpp:140
+    #1 0x4e8f456 in echo_npu_copy_from echo_npu_ops.cpp:459
+    #2 0x4e8f789 in echo_npu_masked_fill_Scalar echo_npu_ops.cpp:1022
 
 0x7f8b8c000000 is located 0 bytes inside of 16-byte region [0x7f8b8c000000,0x7f8b8c000010)
 freed by thread T0 here:
     #0 0x7f8b8d123456 in free (/usr/lib/x86_64-linux-gnu/libasan.so.5+0x123456)
-    #1 0x4e8f789 in casNpuFree simulator.cpp:114
-    #2 0x4e8fabc in ~CasNpuAllocator cas_npu_allocator.cpp:43
+    #1 0x4e8f789 in echoNpuFree simulator.cpp:114
+    #2 0x4e8fabc in ~EchoNpuAllocator echo_npu_allocator.cpp:43
 
-SUMMARY: AddressSanitizer: heap-use-after-free simulator.cpp:140 in casNpuMemcpy
+SUMMARY: AddressSanitizer: heap-use-after-free simulator.cpp:140 in echoNpuMemcpy
 ```
 
 ## 关键检查点
 
 基于之前的分析，AddressSanitizer 应该重点检查：
 
-1. **casNpuMemcpy**：内存拷贝时是否越界
-2. **casNpuMalloc/Free**：内存分配/释放是否正确配对
-3. **cas_npu_copy_from**：拷贝操作是否正确处理大小
+1. **echoNpuMemcpy**：内存拷贝时是否越界
+2. **echoNpuMalloc/Free**：内存分配/释放是否正确配对
+3. **echo_npu_copy_from**：拷贝操作是否正确处理大小
 4. **masked_fill_ 实现**：是否有内存访问错误
 
 ## 下一步行动

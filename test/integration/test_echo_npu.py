@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-CAS-NPU自定义设备测试脚本
+ECHO-NPU自定义设备测试脚本
 
 测试内容：
 1. 设备可用性检查
@@ -15,11 +15,11 @@ CAS-NPU自定义设备测试脚本
 import sys
 import os
 
-# 确保导入本地的cas_npu包（从test目录向上一级找到cas_npu包）
+# 确保导入本地的echo_npu包（从test目录向上一级找到echo_npu包）
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 导入cas_npu扩展 - 这会自动完成后端注册
-import cas_npu
+# 导入echo_npu扩展 - 这会自动完成后端注册
+import echo_npu
 
 import torch
 print(f"PyTorch version: {torch.__version__}")
@@ -32,12 +32,12 @@ def test_device_availability():
     print("=" * 50)
     
     # 检查设备是否可用
-    available = torch.cas_npu.is_available()
-    print(f"CAS-NPU available: {available}")
-    assert available, "CAS-NPU device should be available"
+    available = torch.echo_npu.is_available()
+    print(f"ECHO-NPU available: {available}")
+    assert available, "ECHO-NPU device should be available"
     
     # 获取设备数量
-    count = torch.cas_npu.device_count()
+    count = torch.echo_npu.device_count()
     print(f"Device count: {count}")
     assert count == 1, f"Expected 1 device, got {count}"
     
@@ -54,13 +54,13 @@ def test_tensor_creation():
     cpu_tensor = torch.randn(3, 4, dtype=torch.float32)
     print(f"CPU tensor: shape={cpu_tensor.shape}, device={cpu_tensor.device}")
     
-    # 转移到CAS-NPU设备
-    device = torch.device("cas_npu:0")
+    # 转移到ECHO-NPU设备
+    device = torch.device("echo_npu:0")
     npu_tensor = cpu_tensor.to(device)
-    print(f"CAS-NPU tensor: shape={npu_tensor.shape}, device={npu_tensor.device}")
+    print(f"ECHO-NPU tensor: shape={npu_tensor.shape}, device={npu_tensor.device}")
     
     # 验证设备类型
-    assert npu_tensor.device.type == "cas_npu", f"Expected cas_npu device, got {npu_tensor.device.type}"
+    assert npu_tensor.device.type == "echo_npu", f"Expected echo_npu device, got {npu_tensor.device.type}"
     assert npu_tensor.device.index == 0, f"Expected device index 0, got {npu_tensor.device.index}"
     
     # 转回CPU
@@ -79,7 +79,7 @@ def test_add_tensor():
     print("Test 3: add.Tensor Operation")
     print("=" * 50)
     
-    device = torch.device("cas_npu:0")
+    device = torch.device("echo_npu:0")
     
     # 创建测试数据
     a_cpu = torch.tensor([[1.0, 2.0], [3.0, 4.0]], dtype=torch.float32)
@@ -88,7 +88,7 @@ def test_add_tensor():
     print(f"a_cpu:\n{a_cpu}")
     print(f"b_cpu:\n{b_cpu}")
     
-    # 转到CAS-NPU设备
+    # 转到ECHO-NPU设备
     a = a_cpu.to(device)
     b = b_cpu.to(device)
     
@@ -127,12 +127,12 @@ def test_device_switching():
     print("=" * 50)
     
     # 获取当前设备
-    current = torch.cas_npu.current_device()
+    current = torch.echo_npu.current_device()
     print(f"Current device: {current}")
     assert current == 0, f"Expected device 0, got {current}"
     
     # 在设备0上创建tensor
-    device0 = torch.device("cas_npu:0")
+    device0 = torch.device("echo_npu:0")
     t0_cpu = torch.randn(2, 2)
     t0 = t0_cpu.to(device0)
     print(f"Tensor on device 0: {t0.device}")
@@ -142,26 +142,26 @@ def test_device_switching():
 
 
 def test_tensor_methods():
-    """测试5: Tensor方法（is_cas_npu等）"""
+    """测试5: Tensor方法（is_echo_npu等）"""
     print("\n" + "=" * 50)
     print("Test 5: Tensor Methods")
     print("=" * 50)
     
     cpu_tensor = torch.randn(2, 3)
-    npu_tensor = cpu_tensor.to("cas_npu:0")
+    npu_tensor = cpu_tensor.to("echo_npu:0")
     
-    # 测试is_cas_npu属性
-    print(f"cpu_tensor.is_cas_npu: {cpu_tensor.is_cas_npu}")
-    print(f"npu_tensor.is_cas_npu: {npu_tensor.is_cas_npu}")
+    # 测试is_echo_npu属性
+    print(f"cpu_tensor.is_echo_npu: {cpu_tensor.is_echo_npu}")
+    print(f"npu_tensor.is_echo_npu: {npu_tensor.is_echo_npu}")
     
-    assert not cpu_tensor.is_cas_npu, "CPU tensor should not be cas_npu"
-    assert npu_tensor.is_cas_npu, "NPU tensor should be cas_npu"
+    assert not cpu_tensor.is_echo_npu, "CPU tensor should not be echo_npu"
+    assert npu_tensor.is_echo_npu, "NPU tensor should be echo_npu"
     
-    # 测试cas_npu()方法
+    # 测试echo_npu()方法
     t = torch.randn(2, 2)
-    t_npu = t.cas_npu()
-    print(f"t.cas_npu() device: {t_npu.device}")
-    assert t_npu.is_cas_npu, "Tensor after .cas_npu() should be on cas_npu device"
+    t_npu = t.echo_npu()
+    print(f"t.echo_npu() device: {t_npu.device}")
+    assert t_npu.is_echo_npu, "Tensor after .echo_npu() should be on echo_npu device"
     
     print("✓ Tensor methods test passed")
 
@@ -169,7 +169,7 @@ def test_tensor_methods():
 def run_all_tests():
     """运行所有测试"""
     print("=" * 60)
-    print("CAS-NPU Custom Device Extension Tests")
+    print("ECHO-NPU Custom Device Extension Tests")
     print("=" * 60)
     
     try:

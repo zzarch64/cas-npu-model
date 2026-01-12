@@ -20,12 +20,12 @@ from datetime import datetime
 # 添加扩展路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 导入cas_npu扩展
+# 导入echo_npu扩展
 try:
-    import cas_npu
-    print("✓ CAS-NPU extension imported successfully")
+    import echo_npu
+    print("✓ ECHO-NPU extension imported successfully")
 except ImportError as e:
-    print(f"✗ Failed to import CAS-NPU extension: {e}")
+    print(f"✗ Failed to import ECHO-NPU extension: {e}")
     sys.exit(1)
 
 # 检查 transformers 是否安装
@@ -79,8 +79,8 @@ def set_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    if hasattr(torch.cas_npu, 'manual_seed'):
-        torch.cas_npu.manual_seed(seed)
+    if hasattr(torch.echo_npu, 'manual_seed'):
+        torch.echo_npu.manual_seed(seed)
     print(f"✓ Random seed set to {seed}")
 
 
@@ -271,8 +271,8 @@ def train_epoch(model, dataloader, optimizer, device, epoch):
         
         # 清理内存
         del outputs, loss
-        if hasattr(torch.cas_npu, 'empty_cache'):
-            torch.cas_npu.empty_cache()
+        if hasattr(torch.echo_npu, 'empty_cache'):
+            torch.echo_npu.empty_cache()
         
         # 打印进度
         if (batch_idx + 1) % 5 == 0:
@@ -341,8 +341,8 @@ Examples:
                         help='LoRA dropout (default: 0.1)')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed (default: 42)')
-    parser.add_argument('--device', type=str, default='cas_npu:0',
-                        help='Device to use (default: cas_npu:0)')
+    parser.add_argument('--device', type=str, default='echo_npu:0',
+                        help='Device to use (default: echo_npu:0)')
     parser.add_argument('--save-steps', type=int, default=5,
                         help='Save checkpoint every N steps (default: 5)')
     
@@ -352,8 +352,8 @@ Examples:
     print("Qwen LoRA Fine-tuning Training")
     print("=" * 60)
     print(f"PyTorch version: {torch.__version__}")
-    print(f"CAS-NPU available: {torch.cas_npu.is_available()}")
-    print(f"CAS-NPU device count: {torch.cas_npu.device_count()}")
+    print(f"ECHO-NPU available: {torch.echo_npu.is_available()}")
+    print(f"ECHO-NPU device count: {torch.echo_npu.device_count()}")
     print()
     
     # 设置随机种子

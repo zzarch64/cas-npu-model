@@ -229,7 +229,7 @@ valgrind --log-file=valgrind_%p.log python your_script.py
 import torch
 import sys
 sys.path.insert(0, '.')
-import cas_npu
+import echo_npu
 
 device = torch.device('privateuseone:0')
 x = torch.ones((2, 3), device=device)
@@ -239,7 +239,7 @@ print("Result:", x.cpu())
 ```
 
 ```bash
-valgrind --leak-check=full python test_minimal.py 2>&1 | grep -i "cas_npu\|invalid\|LEAK"
+valgrind --leak-check=full python test_minimal.py 2>&1 | grep -i "echo_npu\|invalid\|LEAK"
 ```
 
 ---
@@ -430,7 +430,7 @@ void my_free(void* ptr) {
 
 ---
 
-## 实战示例：调试 CAS-NPU 扩展
+## 实战示例：调试 ECHO-NPU 扩展
 
 ### 问题描述
 
@@ -445,7 +445,7 @@ void my_free(void* ptr) {
 import torch
 import sys
 sys.path.insert(0, '.')
-import cas_npu
+import echo_npu
 
 device = torch.device('privateuseone:0')
 print('Testing masked_fill_...')
@@ -474,7 +474,7 @@ valgrind --leak-check=full \
 
 ```bash
 # 查找与我们代码相关的错误
-grep -i "cas_npu\|masked_fill" valgrind_masked_fill.log
+grep -i "echo_npu\|masked_fill" valgrind_masked_fill.log
 
 # 查找内存错误
 grep -i "invalid\|leak" valgrind_masked_fill.log | head -50
@@ -485,11 +485,11 @@ grep -i "invalid\|leak" valgrind_masked_fill.log | head -50
 假设发现：
 ```
 ==12345== Invalid write of size 4
-==12345==    at 0x4E8F123: casNpuMemcpy (simulator.cpp:140)
-==12345==    by 0x4E8F456: cas_npu_copy_from (cas_npu_ops.cpp:459)
+==12345==    at 0x4E8F123: echoNpuMemcpy (simulator.cpp:140)
+==12345==    by 0x4E8F456: echo_npu_copy_from (echo_npu_ops.cpp:459)
 ```
 
-这表明问题在 `casNpuMemcpy` 中。
+这表明问题在 `echoNpuMemcpy` 中。
 
 #### 5. 修复代码
 
@@ -497,12 +497,12 @@ grep -i "invalid\|leak" valgrind_masked_fill.log | head -50
 
 ```cpp
 // 可能的问题：size 计算错误
-CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKind kind) {
+EchoNpuError echoNpuMemcpy(void* dst, const void* src, size_t size, EchoNpuMemcpyKind kind) {
     if (size > 0) {
         // 确保不会越界
         memcpy(dst, src, size);  // ← 检查 dst 和 src 的实际大小
     }
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 ```
 

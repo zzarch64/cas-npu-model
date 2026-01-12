@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 # 导入测试框架
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from test_framework import (
-    ensure_cas_npu, TestConfig, VerbosityLevel, check_tensor, verify_tensor_match,
+    ensure_echo_npu, TestConfig, VerbosityLevel, check_tensor, verify_tensor_match,
     print_section, print_step, create_arg_parser, run_test, analyze_nan_distribution
 )
 
@@ -239,7 +239,7 @@ def main():
     args = parser.parse_args()
     config = TestConfig.from_args(args)
     
-    ensure_cas_npu()
+    ensure_echo_npu()
     
     print_section("Linear Layer Test", config)
     

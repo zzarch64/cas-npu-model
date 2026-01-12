@@ -1,8 +1,8 @@
-// CAS-NPU Runtime Implementation - 模拟NPU runtime和驱动
+// ECHO-NPU Runtime Implementation - 模拟NPU runtime和驱动
 // 使用CPU模拟NPU设备的行为
 
-#include "../cas_npu_runtime.h"
-#include "../cas_npu_debug.h"
+#include "../echo_npu_runtime.h"
+#include "../echo_npu_debug.h"
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
@@ -10,7 +10,7 @@
 #include <mutex>
 #include <vector>
 
-namespace cas_npu {
+namespace echo_npu {
 
 // 全局状态
 static thread_local int current_device = 0;
@@ -24,37 +24,37 @@ static uint64_t add_operations = 0;
 static uint64_t mm_operations = 0;
 static uint64_t bmm_operations = 0;
 
-CasNpuError casNpuGetDeviceCount(int* count) {
+EchoNpuError echoNpuGetDeviceCount(int* count) {
     if (count == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
-    *count = CAS_NPU_DEVICE_COUNT;
-    return CAS_NPU_SUCCESS;
+    *count = ECHO_NPU_DEVICE_COUNT;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuSetDevice(int device) {
-    if (device < 0 || device >= CAS_NPU_DEVICE_COUNT) {
-        return CAS_NPU_ERROR_INVALID_DEVICE;
+EchoNpuError echoNpuSetDevice(int device) {
+    if (device < 0 || device >= ECHO_NPU_DEVICE_COUNT) {
+        return ECHO_NPU_ERROR_INVALID_DEVICE;
     }
     current_device = device;
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuGetDevice(int* device) {
+EchoNpuError echoNpuGetDevice(int* device) {
     if (device == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     *device = current_device;
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuMalloc(void** ptr, size_t size) {
+EchoNpuError echoNpuMalloc(void** ptr, size_t size) {
     if (ptr == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     if (size == 0) {
         *ptr = nullptr;
-        return CAS_NPU_SUCCESS;
+        return ECHO_NPU_SUCCESS;
     }
     
     // 使用标准的 malloc，与 PyTorch CPU allocator 保持一致
@@ -63,7 +63,7 @@ CasNpuError casNpuMalloc(void** ptr, size_t size) {
     void* data = malloc(size);
     
     if (data == nullptr) {
-        return CAS_NPU_ERROR_OUT_OF_MEMORY;
+        return ECHO_NPU_ERROR_OUT_OF_MEMORY;
     }
     
     // 初始化内存为0，避免未初始化内存包含NaN/Inf值
@@ -79,19 +79,19 @@ CasNpuError casNpuMalloc(void** ptr, size_t size) {
     }
     
     *ptr = data;
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuFree(void* ptr) {
+EchoNpuError echoNpuFree(void* ptr) {
     if (ptr == nullptr) {
-        return CAS_NPU_SUCCESS;
+        return ECHO_NPU_SUCCESS;
     }
     
     {
         std::lock_guard<std::mutex> lock(allocation_mutex);
         auto it = allocations.find(ptr);
         if (it == allocations.end()) {
-            return CAS_NPU_ERROR_INVALID_VALUE;
+            return ECHO_NPU_ERROR_INVALID_VALUE;
         }
         allocations.erase(it);
         total_frees++;
@@ -100,15 +100,15 @@ CasNpuError casNpuFree(void* ptr) {
     // 使用标准的 free，与 malloc 配对
     free(ptr);
     
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
 // 带方向的内存拷贝（类似 cudaMemcpy）
 // 在 CPU 模拟器中，所有方向的拷贝都是简单的 memcpy
 // 实际硬件实现中，不同方向可能需要不同的 DMA 操作
-CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKind kind) {
+EchoNpuError echoNpuMemcpy(void* dst, const void* src, size_t size, EchoNpuMemcpyKind kind) {
     if ((dst == nullptr || src == nullptr) && size > 0) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     
     // 在 CPU 模拟器中，所有内存都在同一地址空间
@@ -117,36 +117,36 @@ CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKi
     // Device->Device 可能需要片上内存拷贝
     if (size > 0) {
         switch (kind) {
-            case CAS_NPU_MEMCPY_HOST_TO_HOST:
-            case CAS_NPU_MEMCPY_HOST_TO_DEVICE:
-            case CAS_NPU_MEMCPY_DEVICE_TO_HOST:
-            case CAS_NPU_MEMCPY_DEVICE_TO_DEVICE:
-            case CAS_NPU_MEMCPY_DEFAULT:
+            case ECHO_NPU_MEMCPY_HOST_TO_HOST:
+            case ECHO_NPU_MEMCPY_HOST_TO_DEVICE:
+            case ECHO_NPU_MEMCPY_DEVICE_TO_HOST:
+            case ECHO_NPU_MEMCPY_DEVICE_TO_DEVICE:
+            case ECHO_NPU_MEMCPY_DEFAULT:
             default:
                 memcpy(dst, src, size);
                 break;
         }
     }
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuMemset(void* ptr, int value, size_t size) {
+EchoNpuError echoNpuMemset(void* ptr, int value, size_t size) {
     if (ptr == nullptr && size > 0) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     if (size > 0) {
         memset(ptr, value, size);
     }
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-CasNpuError casNpuDeviceSynchronize() {
+EchoNpuError echoNpuDeviceSynchronize() {
     // CPU模拟，无需实际同步
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
 // 核心功能：模拟NPU加法运算
-CasNpuError casNpuAddTensor(
+EchoNpuError echoNpuAddTensor(
     float* output,
     const float* input1,
     const float* input2,
@@ -154,10 +154,10 @@ CasNpuError casNpuAddTensor(
     float alpha) {
     
     if (output == nullptr || input1 == nullptr || input2 == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     
-    CAS_NPU_DEBUG_RUNTIME("casNpuAddTensor", " elements=%zu alpha=%.2f", num_elements, alpha);
+    ECHO_NPU_DEBUG_RUNTIME("echoNpuAddTensor", " elements=%zu alpha=%.2f", num_elements, alpha);
     
     // 模拟NPU加法: output = input1 + alpha * input2
     for (size_t i = 0; i < num_elements; ++i) {
@@ -166,12 +166,12 @@ CasNpuError casNpuAddTensor(
     
     add_operations++;
     
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
 // 矩阵乘法实现: output = input1 @ input2
 // 使用简单的三重循环实现 (实际NPU会有优化实现)
-CasNpuError casNpuMatMul(
+EchoNpuError echoNpuMatMul(
     float* output,
     const float* input1,
     const float* input2,
@@ -180,13 +180,13 @@ CasNpuError casNpuMatMul(
     int64_t N) {
     
     if (output == nullptr || input1 == nullptr || input2 == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     if (M <= 0 || K <= 0 || N <= 0) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     
-    CAS_NPU_DEBUG_RUNTIME("casNpuMatMul", " M=%ld K=%ld N=%ld FLOPs=%ld", M, K, N, 2*M*K*N);
+    ECHO_NPU_DEBUG_RUNTIME("echoNpuMatMul", " M=%ld K=%ld N=%ld FLOPs=%ld", M, K, N, 2*M*K*N);
     
     // 初始化输出为0
     for (int64_t i = 0; i < M * N; ++i) {
@@ -205,11 +205,11 @@ CasNpuError casNpuMatMul(
     }
     
     mm_operations++;
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
 // 批量矩阵乘法实现: output[b] = input1[b] @ input2[b]
-CasNpuError casNpuBatchMatMul(
+EchoNpuError echoNpuBatchMatMul(
     float* output,
     const float* input1,
     const float* input2,
@@ -219,13 +219,13 @@ CasNpuError casNpuBatchMatMul(
     int64_t N) {
     
     if (output == nullptr || input1 == nullptr || input2 == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     if (B <= 0 || M <= 0 || K <= 0 || N <= 0) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     
-    CAS_NPU_DEBUG_RUNTIME("casNpuBatchMatMul", " B=%ld M=%ld K=%ld N=%ld", B, M, K, N);
+    ECHO_NPU_DEBUG_RUNTIME("echoNpuBatchMatMul", " B=%ld M=%ld K=%ld N=%ld", B, M, K, N);
     
     // 对每个batch执行矩阵乘法
     for (int64_t b = 0; b < B; ++b) {
@@ -249,11 +249,11 @@ CasNpuError casNpuBatchMatMul(
     }
     
     bmm_operations++;
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
 // 张量连接实现: 将两个张量沿着指定维度连接
-CasNpuError casNpuCat(
+EchoNpuError echoNpuCat(
     float* output,
     const float* input1,
     const float* input2,
@@ -264,19 +264,19 @@ CasNpuError casNpuCat(
     int ndim) {
     
     if (output == nullptr || input1 == nullptr || input2 == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     if (shape1 == nullptr || shape2 == nullptr || output_shape == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     if (dim < 0 || dim >= ndim) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     
     // 验证形状：除了连接维度，其他维度必须相同
     for (int i = 0; i < ndim; ++i) {
         if (i != dim && shape1[i] != shape2[i]) {
-            return CAS_NPU_ERROR_INVALID_VALUE;
+            return ECHO_NPU_ERROR_INVALID_VALUE;
         }
     }
     
@@ -321,11 +321,11 @@ CasNpuError casNpuCat(
         }
     }
     
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
 // 量化操作实现: 将float32量化为int8
-CasNpuError casNpuQuantize(
+EchoNpuError echoNpuQuantize(
     int8_t* output,
     const float* input,
     size_t num_elements,
@@ -333,13 +333,13 @@ CasNpuError casNpuQuantize(
     int8_t zero_point) {
     
     if (output == nullptr || input == nullptr) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     if (num_elements == 0) {
-        return CAS_NPU_SUCCESS;
+        return ECHO_NPU_SUCCESS;
     }
     if (scale <= 0.0f) {
-        return CAS_NPU_ERROR_INVALID_VALUE;
+        return ECHO_NPU_ERROR_INVALID_VALUE;
     }
     
     // 量化公式: quantized = round(input / scale) + zero_point
@@ -358,24 +358,24 @@ CasNpuError casNpuQuantize(
         output[i] = static_cast<int8_t>(quantized_int);
     }
     
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 
-const char* casNpuGetErrorString(CasNpuError error) {
+const char* echoNpuGetErrorString(EchoNpuError error) {
     switch (error) {
-        case CAS_NPU_SUCCESS:
-            return "NPU-CAS Success";
-        case CAS_NPU_ERROR_INVALID_DEVICE:
-            return "NPU-CAS Invalid device";
-        case CAS_NPU_ERROR_OUT_OF_MEMORY:
-            return "NPU-CAS Out of memory";
-        case CAS_NPU_ERROR_INVALID_VALUE:
-            return "NPU-CAS Invalid value";
-        case CAS_NPU_ERROR_UNKNOWN:
+        case ECHO_NPU_SUCCESS:
+            return "ECHO-NPU Success";
+        case ECHO_NPU_ERROR_INVALID_DEVICE:
+            return "ECHO-NPU Invalid device";
+        case ECHO_NPU_ERROR_OUT_OF_MEMORY:
+            return "ECHO-NPU Out of memory";
+        case ECHO_NPU_ERROR_INVALID_VALUE:
+            return "ECHO-NPU Invalid value";
+        case ECHO_NPU_ERROR_UNKNOWN:
         default:
-            return "NPU-CAS Unknown error";
+            return "ECHO-NPU Unknown error";
     }
 }
 
-} // namespace cas_npu
+} // namespace echo_npu
 

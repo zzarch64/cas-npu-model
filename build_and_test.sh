@@ -1,16 +1,16 @@
 #!/bin/bash
-# NPU-CAS Extension Build and Test Script
+# ECHO-NPU Extension Build and Test Script
 
 set -e
 
 echo "=========================================="
-echo "NPU-CAS Extension Build and Test"
+echo "ECHO-NPU Extension Build and Test"
 echo "=========================================="
 
 # 清理旧的构建
 echo ""
 echo "Step 1: Cleaning old build..."
-rm -rf build/ dist/ *.egg-info python/*.so python/_cas_npu_C*.so
+rm -rf build/ dist/ *.egg-info python/*.so python/_echo_npu_C*.so
 
 # 构建扩展
 echo ""

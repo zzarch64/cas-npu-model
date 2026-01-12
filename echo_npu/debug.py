@@ -1,17 +1,17 @@
-# CAS-NPU Debug Module
+# ECHO-NPU Debug Module
 # 用于控制调试打印的Python接口
 """
 调试打印使用说明：
 
 1. 通过环境变量启用调试打印：
-   - CAS_NPU_DEBUG=1          启用基本调试打印
-   - CAS_NPU_DEBUG_LEVEL=N    设置详细程度 (1-3)
+   - ECHO_NPU_DEBUG=1          启用基本调试打印
+   - ECHO_NPU_DEBUG_LEVEL=N    设置详细程度 (1-3)
      - Level 1: 仅显示算子执行信息
      - Level 2: 显示算子执行 + 数据传输 (默认)
      - Level 3: 全部信息 (含Runtime层)
 
 2. 在Python中使用：
-   import cas_npu.debug as debug
+   import echo_npu.debug as debug
    debug.enable()              # 启用调试
    debug.disable()             # 禁用调试
    debug.set_level(3)          # 设置详细程度
@@ -51,16 +51,16 @@ def enable(level: int = 2):
             2 = 算子 + 数据传输 (默认)
             3 = 全部信息
     """
-    os.environ['CAS_NPU_DEBUG'] = '1'
-    os.environ['CAS_NPU_DEBUG_LEVEL'] = str(level)
-    print(f"[CAS-NPU Debug] 已启用调试打印, Level={level}")
+    os.environ['ECHO_NPU_DEBUG'] = '1'
+    os.environ['ECHO_NPU_DEBUG_LEVEL'] = str(level)
+    print(f"[ECHO-NPU Debug] 已启用调试打印, Level={level}")
     print("  图例: [NPU]=原生  [CPU←→NPU]=显式Fallback  [VIEW]=View  [CPU]=纯Fallback  [COPY]=传输")
 
 def disable():
     """禁用调试打印"""
-    os.environ['CAS_NPU_DEBUG'] = '0'
-    os.environ['CAS_NPU_DEBUG_LEVEL'] = '0'
-    print("[CAS-NPU Debug] 已禁用调试打印")
+    os.environ['ECHO_NPU_DEBUG'] = '0'
+    os.environ['ECHO_NPU_DEBUG_LEVEL'] = '0'
+    print("[ECHO-NPU Debug] 已禁用调试打印")
 
 def set_level(level: int):
     """
@@ -69,17 +69,17 @@ def set_level(level: int):
     Args:
         level: 1=算子, 2=算子+传输, 3=全部
     """
-    os.environ['CAS_NPU_DEBUG_LEVEL'] = str(level)
-    print(f"[CAS-NPU Debug] 详细程度设置为 Level={level}")
+    os.environ['ECHO_NPU_DEBUG_LEVEL'] = str(level)
+    print(f"[ECHO-NPU Debug] 详细程度设置为 Level={level}")
 
 def is_enabled() -> bool:
     """检查调试打印是否已启用"""
-    env = os.environ.get('CAS_NPU_DEBUG', '0')
+    env = os.environ.get('ECHO_NPU_DEBUG', '0')
     return env == '1' or env.lower() == 'true'
 
 def get_level() -> int:
     """获取当前调试详细程度"""
-    return int(os.environ.get('CAS_NPU_DEBUG_LEVEL', '0'))
+    return int(os.environ.get('ECHO_NPU_DEBUG_LEVEL', '0'))
 
 # Context manager for temporary debug mode
 class debug_mode:
@@ -96,15 +96,15 @@ class debug_mode:
         self.old_level = None
     
     def __enter__(self):
-        self.old_debug = os.environ.get('CAS_NPU_DEBUG', '0')
-        self.old_level = os.environ.get('CAS_NPU_DEBUG_LEVEL', '0')
-        os.environ['CAS_NPU_DEBUG'] = '1'
-        os.environ['CAS_NPU_DEBUG_LEVEL'] = str(self.level)
+        self.old_debug = os.environ.get('ECHO_NPU_DEBUG', '0')
+        self.old_level = os.environ.get('ECHO_NPU_DEBUG_LEVEL', '0')
+        os.environ['ECHO_NPU_DEBUG'] = '1'
+        os.environ['ECHO_NPU_DEBUG_LEVEL'] = str(self.level)
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        os.environ['CAS_NPU_DEBUG'] = self.old_debug
-        os.environ['CAS_NPU_DEBUG_LEVEL'] = self.old_level
+        os.environ['ECHO_NPU_DEBUG'] = self.old_debug
+        os.environ['ECHO_NPU_DEBUG_LEVEL'] = self.old_level
         return False
 
 def print_summary():
@@ -115,12 +115,12 @@ def print_summary():
     如果调试未启用，此函数不会打印任何内容。
     """
     try:
-        import cas_npu
-        cas_npu._C.print_debug_summary()
+        import echo_npu
+        echo_npu._C.print_debug_summary()
     except ImportError:
-        print("[CAS-NPU Debug] 无法打印统计摘要：扩展未加载")
+        print("[ECHO-NPU Debug] 无法打印统计摘要：扩展未加载")
     except AttributeError:
-        print("[CAS-NPU Debug] 无法打印统计摘要：接口不可用")
+        print("[ECHO-NPU Debug] 无法打印统计摘要：接口不可用")
 
 __all__ = [
     'enable',

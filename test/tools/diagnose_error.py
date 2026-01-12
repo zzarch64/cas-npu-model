@@ -14,7 +14,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from test_framework import ensure_cas_npu, TestConfig, create_arg_parser
+from test_framework import ensure_echo_npu, TestConfig, create_arg_parser
 import torch
 import numpy as np
 
@@ -143,7 +143,7 @@ def diagnose_model(model_path: str, num_layers: int = 5):
         print("transformers not installed")
         return
     
-    device = torch.device("cas_npu:0")
+    device = torch.device("echo_npu:0")
     
     print(f"加载模型: {model_path}")
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, local_files_only=True)
@@ -268,7 +268,7 @@ def main():
     parser.add_argument('--num-layers', type=int, default=5)
     args = parser.parse_args()
     
-    ensure_cas_npu()
+    ensure_echo_npu()
     
     print("="*80)
     print("误差诊断工具：区分计算错误 vs 精度问题")

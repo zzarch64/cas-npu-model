@@ -1,22 +1,22 @@
-// CAS-NPU DeviceGuard Header
+// ECHO-NPU DeviceGuard Header
 #pragma once
 
 #include <c10/core/Device.h>
 #include <c10/core/Stream.h>
 #include <c10/core/impl/DeviceGuardImplInterface.h>
 
-namespace cas_npu {
+namespace echo_npu {
 
-// CAS-NPU DeviceGuard实现
+// ECHO-NPU DeviceGuard实现
 // 负责设备切换、流管理等
-struct CasNpuGuardImpl final : public c10::impl::DeviceGuardImplInterface {
+struct EchoNpuGuardImpl final : public c10::impl::DeviceGuardImplInterface {
     static constexpr c10::DeviceType static_type = c10::DeviceType::PrivateUse1;
     
-    CasNpuGuardImpl() = default;
+    EchoNpuGuardImpl() = default;
     
-    explicit CasNpuGuardImpl(c10::DeviceType t) {
+    explicit EchoNpuGuardImpl(c10::DeviceType t) {
         TORCH_CHECK(t == static_type, 
-                    "CasNpuGuardImpl initialized with non-PrivateUse1 DeviceType: ", t);
+                    "EchoNpuGuardImpl initialized with non-PrivateUse1 DeviceType: ", t);
     }
     
     // 返回设备类型
@@ -78,5 +78,5 @@ struct CasNpuGuardImpl final : public c10::impl::DeviceGuardImplInterface {
                        const c10::DeviceIndex device_index) const override;
 };
 
-} // namespace cas_npu
+} // namespace echo_npu
 

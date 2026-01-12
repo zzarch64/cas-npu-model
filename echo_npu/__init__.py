@@ -1,4 +1,4 @@
-# CAS-NPU Python Package
+# ECHO-NPU Python Package
 # 自定义设备扩展，使用PrivateUse1 dispatch key
 
 import sys
@@ -13,8 +13,8 @@ from torch.utils.backend_registration import (
 # 这确保 Python print() 和 C++ fprintf(stdout) 的输出顺序一致
 # 注意：只有在启用调试时才设置，避免影响正常使用
 import os
-_debug_enabled = os.environ.get('CAS_NPU_DEBUG', '0') in ('1', 'true')
-_debug_level = int(os.environ.get('CAS_NPU_DEBUG_LEVEL', '0'))
+_debug_enabled = os.environ.get('ECHO_NPU_DEBUG', '0') in ('1', 'true')
+_debug_level = int(os.environ.get('ECHO_NPU_DEBUG_LEVEL', '0'))
 if (_debug_enabled or _debug_level > 0) and not sys.stdout.isatty():
     # 只有在启用调试且重定向到文件时才设置（终端默认就是行缓冲）
     try:
@@ -26,14 +26,14 @@ if (_debug_enabled or _debug_level > 0) and not sys.stdout.isatty():
         # 如果设置失败，忽略（不影响功能）
         pass
 
-# 重命名PrivateUse1后端为cas_npu
-_BACKEND_NAME = "cas_npu"
+# 重命名PrivateUse1后端为echo_npu
+_BACKEND_NAME = "echo_npu"
 
 def _init_extension():
-    """初始化CAS-NPU扩展"""
+    """初始化ECHO-NPU扩展"""
     try:
         # 导入编译的C++扩展
-        from . import _cas_npu_C as _C
+        from . import _echo_npu_C as _C
         
         # 重命名后端
         rename_privateuse1_backend(_BACKEND_NAME)
@@ -47,24 +47,24 @@ def _init_extension():
         )
         
         # 注册设备模块
-        torch._register_device_module(_BACKEND_NAME, _CasNpuModule())
+        torch._register_device_module(_BACKEND_NAME, _EchoNpuModule())
         
         return _C
     except ImportError as e:
         raise ImportError(
-            f"Failed to import CAS-NPU extension. "
+            f"Failed to import ECHO-NPU extension. "
             f"Make sure the extension is properly built. Error: {e}"
         )
 
-class _CasNpuModule:
-    """CAS-NPU设备模块，提供设备相关的API"""
+class _EchoNpuModule:
+    """ECHO-NPU设备模块，提供设备相关的API"""
     
     def __init__(self):
-        from . import _cas_npu_C as _C
+        from . import _echo_npu_C as _C
         self._C = _C
     
     def is_available(self) -> bool:
-        """检查CAS-NPU设备是否可用"""
+        """检查ECHO-NPU设备是否可用"""
         return self._C.is_available()
     
     def device_count(self) -> int:
@@ -115,8 +115,8 @@ def _print_debug_summary_on_exit():
     try:
         # 检查是否启用了调试
         import os
-        debug_enabled = os.environ.get('CAS_NPU_DEBUG', '0') in ('1', 'true')
-        debug_level = int(os.environ.get('CAS_NPU_DEBUG_LEVEL', '0'))
+        debug_enabled = os.environ.get('ECHO_NPU_DEBUG', '0') in ('1', 'true')
+        debug_level = int(os.environ.get('ECHO_NPU_DEBUG_LEVEL', '0'))
         if debug_enabled and debug_level >= 1:
             _C.print_debug_summary()
     except:
@@ -126,7 +126,7 @@ atexit.register(_print_debug_summary_on_exit)
 
 # 导出公共API
 def is_available() -> bool:
-    """检查CAS-NPU设备是否可用"""
+    """检查ECHO-NPU设备是否可用"""
     return _C.is_available()
 
 def device_count() -> int:

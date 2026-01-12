@@ -3,7 +3,7 @@
 LeNet 训练示例 - 使用 MSELoss 避免 log_softmax 问题
 
 这个示例展示了：
-1. 在 cas_npu 设备上运行完整的训练流程
+1. 在 echo_npu 设备上运行完整的训练流程
 2. 反向传播和梯度计算
 3. 参数更新和优化器使用
 
@@ -20,22 +20,22 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 导入cas_npu扩展
-import cas_npu
+# 导入echo_npu扩展
+import echo_npu
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 print(f"PyTorch version: {torch.__version__}")
-print(f"CAS-NPU available: {torch.cas_npu.is_available()}")
+print(f"ECHO-NPU available: {torch.echo_npu.is_available()}")
 print()
 
 
 # ============ 工具函数 ============
 
 def _to_cpu(tensor):
-    if isinstance(tensor, torch.Tensor) and tensor.device.type == 'cas_npu':
+    if isinstance(tensor, torch.Tensor) and tensor.device.type == 'echo_npu':
         return tensor.cpu()
     return tensor
 
@@ -249,7 +249,7 @@ def test_add_backward():
     print("Test 1: add.Tensor Backward")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     # 在CPU创建带梯度的tensor，然后转到设备
     a = torch.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True)
@@ -279,7 +279,7 @@ def test_linear_backward():
     print("Test 2: Linear Layer Backward")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     # 简单的线性层
     linear = nn.Linear(4, 2).to(device)
@@ -313,7 +313,7 @@ def test_conv_backward():
     print("Test 3: Conv2d Layer Backward")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     conv = nn.Conv2d(1, 2, kernel_size=3, padding=1).to(device)
     x = torch.randn(1, 1, 4, 4).to(device)
@@ -341,7 +341,7 @@ def test_lenet_training():
     print("Test 4: LeNet Training with MSELoss")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     model = LeNet().to(device)
     criterion = nn.MSELoss()  # 使用MSELoss避免log_softmax问题
@@ -380,7 +380,7 @@ def test_gradient_accumulation():
     print("Test 5: Gradient Accumulation")
     print("=" * 60)
     
-    device = torch.device('cas_npu:0')
+    device = torch.device('echo_npu:0')
     
     linear = nn.Linear(4, 2).to(device)
     
@@ -411,7 +411,7 @@ def test_gradient_accumulation():
 
 def main():
     print("=" * 60)
-    print("LeNet Training Test on CAS-NPU Device")
+    print("LeNet Training Test on ECHO-NPU Device")
     print("=" * 60)
     print()
     print("Note: Using MSELoss instead of CrossEntropyLoss")

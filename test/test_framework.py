@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-CAS-NPU 测试框架
+ECHO-NPU 测试框架
 
 提供统一的测试工具函数、参数配置和结果报告功能。
 """
@@ -16,11 +16,11 @@ from enum import Enum
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    import cas_npu
-    CAS_NPU_AVAILABLE = True
+    import echo_npu
+    ECHO_NPU_AVAILABLE = True
 except ImportError as e:
-    CAS_NPU_AVAILABLE = False
-    CAS_NPU_IMPORT_ERROR = str(e)
+    ECHO_NPU_AVAILABLE = False
+    ECHO_NPU_IMPORT_ERROR = str(e)
 
 
 class VerbosityLevel(Enum):
@@ -42,7 +42,7 @@ class TestConfig:
     """
     def __init__(self):
         self.verbosity = VerbosityLevel.NORMAL
-        self.device = 'cas_npu:0'
+        self.device = 'echo_npu:0'
         self.check_nan = True
         self.check_inf = True
         self.check_gradient = True
@@ -83,10 +83,10 @@ class TestConfig:
         return config
 
 
-def ensure_cas_npu():
-    """确保CAS-NPU扩展已导入"""
-    if not CAS_NPU_AVAILABLE:
-        print(f"✗ Failed to import CAS-NPU extension: {CAS_NPU_IMPORT_ERROR}")
+def ensure_echo_npu():
+    """确保ECHO-NPU扩展已导入"""
+    if not ECHO_NPU_AVAILABLE:
+        print(f"✗ Failed to import ECHO-NPU extension: {ECHO_NPU_IMPORT_ERROR}")
         sys.exit(1)
     return True
 
@@ -135,7 +135,7 @@ def check_tensor(
     if device is not None:
         cpu_tensor = tensor.cpu() if tensor.device != torch.device('cpu') else tensor
     else:
-        cpu_tensor = tensor.cpu() if hasattr(tensor, 'device') and tensor.device.type == 'cas_npu' else tensor
+        cpu_tensor = tensor.cpu() if hasattr(tensor, 'device') and tensor.device.type == 'echo_npu' else tensor
     
     result['shape'] = tuple(tensor.shape)
     result['device'] = str(tensor.device)
@@ -231,8 +231,8 @@ def verify_tensor_match(
         'shape_match': False
     }
     
-    actual_cpu = actual.cpu() if actual.device.type == 'cas_npu' else actual
-    expected_cpu = expected.cpu() if expected.device.type == 'cas_npu' else expected
+    actual_cpu = actual.cpu() if actual.device.type == 'echo_npu' else actual
+    expected_cpu = expected.cpu() if expected.device.type == 'echo_npu' else expected
     
     # 检查形状
     if actual_cpu.shape != expected_cpu.shape:
@@ -278,7 +278,7 @@ def analyze_nan_distribution(
     if config is None:
         config = TestConfig()
     
-    cpu_tensor = tensor.cpu() if tensor.device.type == 'cas_npu' else tensor
+    cpu_tensor = tensor.cpu() if tensor.device.type == 'echo_npu' else tensor
     nan_mask = torch.isnan(cpu_tensor)
     
     result = {
@@ -349,7 +349,7 @@ def print_step(step_name: str, config: Optional[TestConfig] = None):
         print(f"\n[{step_name}]")
 
 
-def create_arg_parser(description: str = "CAS-NPU Test") -> argparse.ArgumentParser:
+def create_arg_parser(description: str = "ECHO-NPU Test") -> argparse.ArgumentParser:
     """创建标准的命令行参数解析器"""
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument(
@@ -366,8 +366,8 @@ def create_arg_parser(description: str = "CAS-NPU Test") -> argparse.ArgumentPar
     parser.add_argument(
         '--device',
         type=str,
-        default='cas_npu:0',
-        help='使用的设备（默认: cas_npu:0）'
+        default='echo_npu:0',
+        help='使用的设备（默认: echo_npu:0）'
     )
     parser.add_argument(
         '--tolerance',
@@ -405,11 +405,11 @@ def run_test(test_func, config: TestConfig, test_name: str = "Test") -> bool:
 
 if __name__ == "__main__":
     # 测试框架本身
-    print("CAS-NPU Test Framework")
+    print("ECHO-NPU Test Framework")
     print("=" * 80)
     
-    ensure_cas_npu()
-    print("✓ CAS-NPU extension imported successfully")
+    ensure_echo_npu()
+    print("✓ ECHO-NPU extension imported successfully")
     
     # 测试配置
     parser = create_arg_parser("Test Framework")

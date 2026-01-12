@@ -1,6 +1,6 @@
 # GDB 调试指南
 
-本指南介绍如何使用 GDB 调试 CAS-NPU 扩展中的 segmentation fault 问题。
+本指南介绍如何使用 GDB 调试 ECHO-NPU 扩展中的 segmentation fault 问题。
 
 ## 快速开始
 
@@ -33,10 +33,10 @@ gdb --args python test/test_lenet.py
 (gdb) run
 
 # 设置断点
-(gdb) break cas_npu_add_Tensor          # 在函数入口设置断点
-(gdb) break cas_npu_ops.cpp:140         # 在特定行设置断点
+(gdb) break echo_npu_add_Tensor          # 在函数入口设置断点
+(gdb) break echo_npu_ops.cpp:140         # 在特定行设置断点
 (gdb) break device_to_cpu                # 在 device_to_cpu 函数设置断点
-(gdb) break cas_npu_copy_from            # 在 _copy_from 函数设置断点
+(gdb) break echo_npu_copy_from            # 在 _copy_from 函数设置断点
 
 # 查看断点
 (gdb) info breakpoints
@@ -109,13 +109,13 @@ gdb --args python test/test_lenet.py
 
 ```gdb
 # 在函数入口设置断点
-(gdb) break cas_npu_add_Tensor
+(gdb) break echo_npu_add_Tensor
 
 # 在检查 contiguous 之前设置断点
-(gdb) break cas_npu_ops.cpp:140
+(gdb) break echo_npu_ops.cpp:140
 
 # 在调用 device_to_cpu 之前设置断点
-(gdb) break cas_npu_ops.cpp:124
+(gdb) break echo_npu_ops.cpp:124
 ```
 
 ### 2. device_to_cpu 函数
@@ -125,17 +125,17 @@ gdb --args python test/test_lenet.py
 (gdb) break device_to_cpu
 
 # 在 TORCH_CHECK 之前设置断点
-(gdb) break cas_npu_ops.cpp:43
+(gdb) break echo_npu_ops.cpp:43
 ```
 
 ### 3. _copy_from 函数
 
 ```gdb
 # 在函数入口设置断点
-(gdb) break cas_npu_copy_from
+(gdb) break echo_npu_copy_from
 
 # 在检查 contiguous 之前设置断点
-(gdb) break cas_npu_ops.cpp:321
+(gdb) break echo_npu_ops.cpp:321
 ```
 
 ## 调试示例
@@ -147,13 +147,13 @@ gdb --args python test/test_lenet.py
 gdb --args python test/test_lenet.py
 
 # 设置断点
-(gdb) break cas_npu_add_Tensor
-(gdb) break cas_npu_ops.cpp:140
+(gdb) break echo_npu_add_Tensor
+(gdb) break echo_npu_ops.cpp:140
 
 # 运行
 (gdb) run
 
-# 当停在 cas_npu_add_Tensor 时
+# 当停在 echo_npu_add_Tensor 时
 (gdb) print self.is_contiguous()
 (gdb) print other.is_contiguous()
 (gdb) print self.strides()
@@ -175,7 +175,7 @@ gdb --args python test/test_lenet.py
 
 # 设置断点
 (gdb) break device_to_cpu
-(gdb) break cas_npu_ops.cpp:43
+(gdb) break echo_npu_ops.cpp:43
 
 # 运行
 (gdb) run
@@ -218,7 +218,7 @@ gdb --args python test/test_lenet.py
 
 ```gdb
 # 只在 tensor 非 contiguous 时停止
-(gdb) break cas_npu_ops.cpp:140 if !self_device.is_contiguous()
+(gdb) break echo_npu_ops.cpp:140 if !self_device.is_contiguous()
 ```
 
 ### 2. 监视变量
@@ -263,7 +263,7 @@ python setup_debug.py build_ext --inplace
 如果无法在函数上设置断点，可能是：
 1. 函数名拼写错误
 2. 函数被内联了（使用 `-O0` 可以避免）
-3. 需要指定文件：`break cas_npu_ops.cpp:function_name`
+3. 需要指定文件：`break echo_npu_ops.cpp:function_name`
 
 ### 问题 3：Python 调试支持
 

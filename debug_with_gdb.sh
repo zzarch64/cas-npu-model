@@ -10,7 +10,7 @@ echo "=========================================="
 # 清理旧的构建
 echo ""
 echo "Step 1: Cleaning old build..."
-rm -rf build/ dist/ *.egg-info cas_npu/*.so cas_npu/_cas_npu_C*.so
+rm -rf build/ dist/ *.egg-info echo_npu/*.so echo_npu/_echo_npu_C*.so
 
 # 使用调试版本构建
 echo ""

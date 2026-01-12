@@ -1,4 +1,4 @@
-// CAS-NPU Debug Header - 调试打印工具
+// ECHO-NPU Debug Header - 调试打印工具
 // 用于跟踪算子执行类型和数据传输方向
 #pragma once
 
@@ -7,7 +7,7 @@
 #include <string>
 #include <atomic>
 
-namespace cas_npu {
+namespace echo_npu {
 namespace debug {
 
 // ============ 算子类型定义 ============
@@ -32,7 +32,7 @@ enum class TransferDir {
 inline bool is_debug_enabled() {
     static int enabled = -1;
     if (enabled < 0) {
-        const char* env = std::getenv("CAS_NPU_DEBUG");
+        const char* env = std::getenv("ECHO_NPU_DEBUG");
         enabled = (env != nullptr && (std::string(env) == "1" || std::string(env) == "true"));
     }
     return enabled > 0;
@@ -42,7 +42,7 @@ inline bool is_debug_enabled() {
 inline int debug_level() {
     static int level = -1;
     if (level < 0) {
-        const char* env = std::getenv("CAS_NPU_DEBUG_LEVEL");
+        const char* env = std::getenv("ECHO_NPU_DEBUG_LEVEL");
         if (env != nullptr) {
             level = std::atoi(env);
         } else if (is_debug_enabled()) {
@@ -97,7 +97,7 @@ struct DebugStats {
     }
     
     void print_summary() {
-        fprintf(stdout, "\n========== CAS-NPU Debug Summary ==========\n");
+        fprintf(stdout, "\n========== ECHO-NPU Debug Summary ==========\n");
         fprintf(stdout, "[Operator Statistics]\n");
         fprintf(stdout, "  * NPU Native ops:      %lu\n", npu_native_ops.load());
         fprintf(stdout, "  * CPU Fallback ops:    %lu\n", cpu_fallback_ops.load());
@@ -150,19 +150,19 @@ inline const char* transfer_dir_str(TransferDir dir) {
 // ============ 主要调试宏 ============
 
 // 打印算子执行信息
-#define CAS_NPU_DEBUG_OP(op_type, op_name, fmt, ...) \
+#define ECHO_NPU_DEBUG_OP(op_type, op_name, fmt, ...) \
     do { \
-        if (::cas_npu::debug::debug_level() >= 1) { \
-            auto& stats = ::cas_npu::debug::get_stats(); \
+        if (::echo_npu::debug::debug_level() >= 1) { \
+            auto& stats = ::echo_npu::debug::get_stats(); \
             switch (op_type) { \
-                case ::cas_npu::debug::OpType::NPU_NATIVE: stats.npu_native_ops++; break; \
-                case ::cas_npu::debug::OpType::CPU_FALLBACK: stats.cpu_fallback_ops++; break; \
-                case ::cas_npu::debug::OpType::VIEW_OP: stats.view_ops++; break; \
-                case ::cas_npu::debug::OpType::PURE_FALLBACK: stats.pure_fallback_ops++; break; \
-                case ::cas_npu::debug::OpType::DATA_COPY: break; /* 传输统计单独处理 */ \
+                case ::echo_npu::debug::OpType::NPU_NATIVE: stats.npu_native_ops++; break; \
+                case ::echo_npu::debug::OpType::CPU_FALLBACK: stats.cpu_fallback_ops++; break; \
+                case ::echo_npu::debug::OpType::VIEW_OP: stats.view_ops++; break; \
+                case ::echo_npu::debug::OpType::PURE_FALLBACK: stats.pure_fallback_ops++; break; \
+                case ::echo_npu::debug::OpType::DATA_COPY: break; /* 传输统计单独处理 */ \
             } \
             fprintf(stdout, "[%s] %s" fmt "\n", \
-                    ::cas_npu::debug::op_type_str(op_type), \
+                    ::echo_npu::debug::op_type_str(op_type), \
                     op_name, \
                     ##__VA_ARGS__); \
             fflush(stdout); \
@@ -170,21 +170,21 @@ inline const char* transfer_dir_str(TransferDir dir) {
     } while(0)
 
 // 打印数据传输信息
-#define CAS_NPU_DEBUG_TRANSFER(dir, bytes, fmt, ...) \
+#define ECHO_NPU_DEBUG_TRANSFER(dir, bytes, fmt, ...) \
     do { \
-        if (::cas_npu::debug::debug_level() >= 2) { \
-            auto& stats = ::cas_npu::debug::get_stats(); \
+        if (::echo_npu::debug::debug_level() >= 2) { \
+            auto& stats = ::echo_npu::debug::get_stats(); \
             switch (dir) { \
-                case ::cas_npu::debug::TransferDir::HOST_TO_DEVICE: \
+                case ::echo_npu::debug::TransferDir::HOST_TO_DEVICE: \
                     stats.h2d_transfers++; stats.h2d_bytes += bytes; break; \
-                case ::cas_npu::debug::TransferDir::DEVICE_TO_HOST: \
+                case ::echo_npu::debug::TransferDir::DEVICE_TO_HOST: \
                     stats.d2h_transfers++; stats.d2h_bytes += bytes; break; \
-                case ::cas_npu::debug::TransferDir::DEVICE_TO_DEVICE: \
+                case ::echo_npu::debug::TransferDir::DEVICE_TO_DEVICE: \
                     stats.d2d_transfers++; stats.d2d_bytes += bytes; break; \
                 default: break; \
             } \
             fprintf(stdout, "  [COPY] _copy_from %s %.2f KB" fmt "\n", \
-                    ::cas_npu::debug::transfer_dir_str(dir), \
+                    ::echo_npu::debug::transfer_dir_str(dir), \
                     static_cast<double>(bytes) / 1024.0, \
                     ##__VA_ARGS__); \
             fflush(stdout); \
@@ -192,9 +192,9 @@ inline const char* transfer_dir_str(TransferDir dir) {
     } while(0)
 
 // 打印Runtime层信息
-#define CAS_NPU_DEBUG_RUNTIME(api_name, fmt, ...) \
+#define ECHO_NPU_DEBUG_RUNTIME(api_name, fmt, ...) \
     do { \
-        if (::cas_npu::debug::debug_level() >= 3) { \
+        if (::echo_npu::debug::debug_level() >= 3) { \
             fprintf(stdout, "      Runtime: %s" fmt "\n", \
                     api_name, \
                     ##__VA_ARGS__); \
@@ -203,18 +203,18 @@ inline const char* transfer_dir_str(TransferDir dir) {
     } while(0)
 
 // 打印统计摘要
-#define CAS_NPU_DEBUG_SUMMARY() \
+#define ECHO_NPU_DEBUG_SUMMARY() \
     do { \
-        if (::cas_npu::debug::debug_level() >= 1) { \
-            ::cas_npu::debug::get_stats().print_summary(); \
+        if (::echo_npu::debug::debug_level() >= 1) { \
+            ::echo_npu::debug::get_stats().print_summary(); \
         } \
     } while(0)
 
 // 重置统计
-#define CAS_NPU_DEBUG_RESET() \
+#define ECHO_NPU_DEBUG_RESET() \
     do { \
-        ::cas_npu::debug::get_stats().reset(); \
+        ::echo_npu::debug::get_stats().reset(); \
     } while(0)
 
 } // namespace debug
-} // namespace cas_npu
+} // namespace echo_npu

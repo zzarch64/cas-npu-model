@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 # 导入测试框架
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from test_framework import (
-    ensure_cas_npu, TestConfig, VerbosityLevel, check_tensor, analyze_nan_distribution,
+    ensure_echo_npu, TestConfig, VerbosityLevel, check_tensor, analyze_nan_distribution,
     print_section, print_step, create_arg_parser
 )
 
@@ -158,7 +158,7 @@ def main():
     args = parser.parse_args()
     config = TestConfig.from_args(args)
     
-    ensure_cas_npu()
+    ensure_echo_npu()
     
     try:
         analyze_gradient_nan_pattern(config)

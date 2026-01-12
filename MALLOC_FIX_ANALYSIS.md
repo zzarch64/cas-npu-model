@@ -19,7 +19,7 @@ actual_size = aligned_size;  // 实际分配的大小可能大于请求的 size
    - 请求分配 `size` 字节
    - 实际分配 `aligned_size` 字节（向上取整到64的倍数）
    - PyTorch 期望的内存大小是 `size`，但我们分配了 `aligned_size`
-   - 在 `casNpuMemcpy` 中，我们使用 `size` 进行拷贝，这是正确的
+   - 在 `echoNpuMemcpy` 中，我们使用 `size` 进行拷贝，这是正确的
    - 但在某些情况下，如果 PyTorch 内部期望访问 `size` 大小的内存，可能会有问题
 
 2. **内存对齐不一致**：
@@ -103,7 +103,7 @@ allocations[data] = size;  // 记录实际分配的大小（现在是 size）
 import torch
 import sys
 sys.path.insert(0, '.')
-import cas_npu
+import echo_npu
 
 device = torch.device('privateuseone:0')
 x = torch.ones((2, 3), device=device)
@@ -136,7 +136,7 @@ python examples/qwen_inference.py --prompt "讲个笑话"
 
 ### 1. 其他内存问题
 
-- `casNpuMemcpy` 中的大小计算错误
+- `echoNpuMemcpy` 中的大小计算错误
 - `_copy_from` 中的内存拷贝逻辑问题
 - 内存释放时机不对
 
@@ -158,19 +158,19 @@ python examples/qwen_inference.py --prompt "讲个笑话"
 
 1. **按需对齐**：
 ```cpp
-CasNpuError casNpuMallocAligned(void** ptr, size_t size, size_t alignment) {
+EchoNpuError echoNpuMallocAligned(void** ptr, size_t size, size_t alignment) {
     if (alignment == 0 || (alignment & (alignment - 1)) != 0) {
-        return CAS_NPU_ERROR_INVALID_VALUE;  // alignment 必须是2的幂
+        return ECHO_NPU_ERROR_INVALID_VALUE;  // alignment 必须是2的幂
     }
     
     // 使用 posix_memalign 分配对齐的内存
     int err = posix_memalign(ptr, alignment, size);
     if (err != 0) {
-        return CAS_NPU_ERROR_OUT_OF_MEMORY;
+        return ECHO_NPU_ERROR_OUT_OF_MEMORY;
     }
     
     memset(*ptr, 0, size);
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 ```
 
@@ -211,4 +211,4 @@ public:
 
 **修改日期**：2026-01-10  
 **修改文件**：`runtime/cmodel/simulator.cpp`  
-**修改内容**：`casNpuMalloc` 和 `casNpuFree` 函数
+**修改内容**：`echoNpuMalloc` 和 `echoNpuFree` 函数

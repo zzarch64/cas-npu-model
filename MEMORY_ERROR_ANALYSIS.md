@@ -88,7 +88,7 @@ outputs = model.generate(
 
 ### 原因 3：内存分配器问题
 
-**假设**：`casNpuMalloc` / `casNpuFree` 在某些情况下破坏了内存元数据。
+**假设**：`echoNpuMalloc` / `echoNpuFree` 在某些情况下破坏了内存元数据。
 
 **证据**：
 - 错误信息 "invalid fastbin entry" 指向 malloc/free
@@ -117,7 +117,7 @@ attention_mask -> causal mask 合并 -> masked_fill_ -> 内存错误
 
 **尝试**：
 ```cpp
-at::Tensor& cas_npu_masked_fill_Scalar(at::Tensor& self, const at::Tensor& mask, const at::Scalar& value) {
+at::Tensor& echo_npu_masked_fill_Scalar(at::Tensor& self, const at::Tensor& mask, const at::Scalar& value) {
     at::Tensor result = at::masked_fill(self, mask, value);
     self.copy_(result);
     return self;
@@ -181,20 +181,20 @@ python examples/qwen_inference.py --prompt "讲个笑话"
 在 `simulator.cpp` 中添加：
 
 ```cpp
-// 在 casNpuMalloc 中
-CasNpuError casNpuMalloc(void** ptr, size_t size) {
+// 在 echoNpuMalloc 中
+EchoNpuError echoNpuMalloc(void** ptr, size_t size) {
     // 添加调试信息
-    fprintf(stderr, "[DEBUG] casNpuMalloc: size=%zu\n", size);
+    fprintf(stderr, "[DEBUG] echoNpuMalloc: size=%zu\n", size);
     
     // ... 原有代码 ...
     
-    fprintf(stderr, "[DEBUG] casNpuMalloc: ptr=%p, actual_size=%zu\n", data, actual_size);
-    return CAS_NPU_SUCCESS;
+    fprintf(stderr, "[DEBUG] echoNpuMalloc: ptr=%p, actual_size=%zu\n", data, actual_size);
+    return ECHO_NPU_SUCCESS;
 }
 
-// 在 casNpuFree 中
-CasNpuError casNpuFree(void* ptr) {
-    fprintf(stderr, "[DEBUG] casNpuFree: ptr=%p\n", ptr);
+// 在 echoNpuFree 中
+EchoNpuError echoNpuFree(void* ptr) {
+    fprintf(stderr, "[DEBUG] echoNpuFree: ptr=%p\n", ptr);
     
     // 检查是否在 allocations 中
     {
@@ -207,7 +207,7 @@ CasNpuError casNpuFree(void* ptr) {
             for (const auto& pair : allocations) {
                 fprintf(stderr, "  %p -> %zu bytes\n", pair.first, pair.second);
             }
-            return CAS_NPU_ERROR_INVALID_VALUE;
+            return ECHO_NPU_ERROR_INVALID_VALUE;
         }
         fprintf(stderr, "[DEBUG] Freeing %zu bytes at %p\n", it->second, ptr);
     }
@@ -218,7 +218,7 @@ CasNpuError casNpuFree(void* ptr) {
 
 ### 方法 3：检查 alignment 问题
 
-在 `simulator.cpp` 的 `casNpuMalloc` 中：
+在 `simulator.cpp` 的 `echoNpuMalloc` 中：
 
 ```cpp
 // 当前实现
@@ -239,7 +239,7 @@ if ((uintptr_t)data % 64 != 0) {
 import torch
 import sys
 sys.path.insert(0, '.')
-import cas_npu
+import echo_npu
 
 device = torch.device('privateuseone:0')
 

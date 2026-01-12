@@ -2,7 +2,7 @@
 
 ## 问题描述
 
-在使用 CAS-NPU 后端进行 Qwen 模型推理时，虽然 `attention_mask` 被正确传递和扩展，但模型生成的内容与输入 prompt 完全无关。
+在使用 ECHO-NPU 后端进行 Qwen 模型推理时，虽然 `attention_mask` 被正确传递和扩展，但模型生成的内容与输入 prompt 完全无关。
 
 ## 测试结果
 
@@ -15,15 +15,15 @@
 - ✅ 在 forward pass 中，不同的 `attention_mask` 会产生不同的输出 logits（差异 > 3.0）
 - ⚠️ 但在生成过程中，有/无 `attention_mask` 的生成结果**完全相同**
 
-### 3. CPU vs CAS-NPU 对比
+### 3. CPU vs ECHO-NPU 对比
 - ✅ 在 CPU 上，模型生成与输入相关的内容："讲个笑话吧。当然可以！这是一个经典的笑话：为什么"
-- ❌ 在 CAS-NPU 上，模型生成与输入无关的内容：",在100以内,同时是2"
-- ❌ CPU 和 CAS-NPU 上的 forward pass 输出 logits 差异显著（最大差异 6.19）
+- ❌ 在 ECHO-NPU 上，模型生成与输入无关的内容：",在100以内,同时是2"
+- ❌ CPU 和 ECHO-NPU 上的 forward pass 输出 logits 差异显著（最大差异 6.19）
 
 ## 根本原因分析
 
 ### 问题定位
-问题不在 `attention_mask` 本身，而在 **CAS-NPU 后端的实现**。CPU 和 CAS-NPU 上的模型输出差异表明：
+问题不在 `attention_mask` 本身，而在 **ECHO-NPU 后端的实现**。CPU 和 ECHO-NPU 上的模型输出差异表明：
 
 1. **算子实现可能有误**：某些关键算子（如 `mm`、`bmm`、`addmm`）的实现可能有问题
 2. **数据拷贝问题**：在 `_copy_from` 中可能存在数据损坏或类型转换错误
@@ -37,13 +37,13 @@
    - 或者 `masked_fill_` 在 C++ 层面调用，Python hook 无法捕获
 
 2. **Forward pass 输出差异**：
-   - CPU 和 CAS-NPU 上的 logits 差异显著
+   - CPU 和 ECHO-NPU 上的 logits 差异显著
    - 这说明问题在模型计算层面，而不在生成逻辑
 
 3. **生成结果差异**：
    - CPU 上生成的内容与输入相关
-   - CAS-NPU 上生成的内容与输入无关
-   - 这进一步确认了问题在 CAS-NPU 后端实现
+   - ECHO-NPU 上生成的内容与输入无关
+   - 这进一步确认了问题在 ECHO-NPU 后端实现
 
 ## 可能的问题点
 
@@ -70,7 +70,7 @@
    - 确保没有数据损坏或精度损失
 
 3. **添加调试输出**：
-   - 在关键算子中添加调试输出，比较 CPU 和 CAS-NPU 上的中间结果
+   - 在关键算子中添加调试输出，比较 CPU 和 ECHO-NPU 上的中间结果
    - 定位具体哪个算子导致输出差异
 
 4. **检查内存管理**：
@@ -81,7 +81,7 @@
 
 - ✅ `attention_mask` 被正确传递和扩展
 - ✅ `attention_mask` 在 forward pass 中影响输出
-- ❌ 模型在 CAS-NPU 上的输出与 CPU 不一致
+- ❌ 模型在 ECHO-NPU 上的输出与 CPU 不一致
 - ❌ 生成的内容与输入无关
 
 ## 下一步行动

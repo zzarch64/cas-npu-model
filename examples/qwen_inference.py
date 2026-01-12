@@ -18,12 +18,12 @@ from typing import Optional, List
 # 添加扩展路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 导入cas_npu扩展
+# 导入echo_npu扩展
 try:
-    import cas_npu
-    print("✓ CAS-NPU extension imported successfully")
+    import echo_npu
+    print("✓ ECHO-NPU extension imported successfully")
 except ImportError as e:
-    print(f"✗ Failed to import CAS-NPU extension: {e}")
+    print(f"✗ Failed to import ECHO-NPU extension: {e}")
     sys.exit(1)
 
 # ============ Monkey Patch: 修复 masked_fill_ 内存问题 ============
@@ -33,7 +33,7 @@ _original_masked_fill_ = torch.Tensor.masked_fill_
 
 def _patched_masked_fill_(self, mask, value):
     """使用非 inplace 版本实现 masked_fill_，避免内存问题"""
-    # 检查是否在 cas_npu 设备上
+    # 检查是否在 echo_npu 设备上
     if self.device.type == 'privateuseone':
         # 使用非 inplace 版本，然后 copy_ 结果
         result = torch.masked_fill(self, mask, value)
@@ -44,7 +44,7 @@ def _patched_masked_fill_(self, mask, value):
         return _original_masked_fill_(self, mask, value)
 
 torch.Tensor.masked_fill_ = _patched_masked_fill_
-print("✓ Patched masked_fill_ for CAS-NPU compatibility")
+print("✓ Patched masked_fill_ for ECHO-NPU compatibility")
 
 # 检查 transformers 是否安装
 try:
@@ -71,12 +71,12 @@ def set_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    if hasattr(torch.cas_npu, 'manual_seed'):
-        torch.cas_npu.manual_seed(seed)
+    if hasattr(torch.echo_npu, 'manual_seed'):
+        torch.echo_npu.manual_seed(seed)
     print(f"✓ Random seed set to {seed}")
 
 
-def load_model_and_tokenizer(model_path: str, lora_path: Optional[str] = None, device: str = 'cas_npu:0'):
+def load_model_and_tokenizer(model_path: str, lora_path: Optional[str] = None, device: str = 'echo_npu:0'):
     """加载模型和tokenizer"""
     print(f"\nLoading model: {model_path}")
     print("  (This may take a while on first run...)")
@@ -164,7 +164,7 @@ def generate_text(
     model, 
     tokenizer, 
     prompt: str, 
-    device: str = 'cas_npu:0',
+    device: str = 'echo_npu:0',
     max_length: int = 512,
     max_new_tokens: int = 256,
     temperature: float = 0.7,
@@ -270,27 +270,27 @@ def generate_text(
                 print(f"  ⚠ Second generation attempt also failed: {e2}")
                 raise  # 重新抛出异常，让调用者处理
     
-    # 【调试信息】打印输出信息
+    # 【调试信息】打印输出统计信息（不打印完整文本内容，避免重复）
     print(f"\n[DEBUG] Output information:")
     print(f"  Output shape: {outputs.shape}")
     print(f"  Input length: {input_ids.shape[1]}")
     print(f"  Output length: {outputs.shape[1]}")
+    print(f"  Generated tokens: {outputs.shape[1] - input_ids.shape[1]}")
     
     # 解码输出
     # 只解码新生成的部分（去掉输入部分）
     generated_ids = outputs[0][input_ids.shape[1]:]
     
     # 使用 decode 正确显示中文
-    full_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
     
-    print(f"  Full output: {full_text[:200]}...")
-    print(f"  Generated only: {generated_text[:200]}...")
+    # 不再在这里打印文本内容，由调用者决定如何显示
+    # 这样可以避免重复打印
     
     return generated_text
 
 
-def interactive_mode(model, tokenizer, device: str = 'cas_npu:0', **generation_kwargs):
+def interactive_mode(model, tokenizer, device: str = 'echo_npu:0', **generation_kwargs):
     """交互式对话模式"""
     print("\n" + "=" * 60)
     print("Interactive Mode")
@@ -349,7 +349,7 @@ def interactive_mode(model, tokenizer, device: str = 'cas_npu:0', **generation_k
             traceback.print_exc()
 
 
-def batch_inference(model, tokenizer, prompts: List[str], device: str = 'cas_npu:0', **generation_kwargs):
+def batch_inference(model, tokenizer, prompts: List[str], device: str = 'echo_npu:0', **generation_kwargs):
     """批量推理模式"""
     print("\n" + "=" * 60)
     print("Batch Inference")
@@ -416,8 +416,8 @@ Examples:
                         help='Enable interactive mode')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed (default: 42)')
-    parser.add_argument('--device', type=str, default='cas_npu:0',
-                        help='Device to use (default: cas_npu:0)')
+    parser.add_argument('--device', type=str, default='echo_npu:0',
+                        help='Device to use (default: echo_npu:0)')
     parser.add_argument('--max-length', type=int, default=512,
                         help='Maximum sequence length (default: 512)')
     parser.add_argument('--max-new-tokens', type=int, default=256,
@@ -441,8 +441,8 @@ Examples:
     print("Qwen Model Inference")
     print("=" * 60)
     print(f"PyTorch version: {torch.__version__}")
-    print(f"CAS-NPU available: {torch.cas_npu.is_available()}")
-    print(f"CAS-NPU device count: {torch.cas_npu.device_count()}")
+    print(f"ECHO-NPU available: {torch.echo_npu.is_available()}")
+    print(f"ECHO-NPU device count: {torch.echo_npu.device_count()}")
     print()
     
     # 设置随机种子

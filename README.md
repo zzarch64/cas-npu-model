@@ -1,4 +1,4 @@
-# CAS-NPU: PyTorch 自定义 NPU 设备扩展
+# ECHO-NPU: PyTorch 自定义 NPU 设备扩展
 
 <div align="center">
 
@@ -17,7 +17,7 @@
 
 ## 📖 项目简介
 
-CAS-NPU 是一个使用 PyTorch 的 `PrivateUse1` 机制实现的自定义设备扩展框架。它提供了一套完整的 NPU 后端实现，支持：
+ECHO-NPU 是一个使用 PyTorch 的 `PrivateUse1` 机制实现的自定义设备扩展框架。它提供了一套完整的 NPU 后端实现，支持：
 
 - ✅ **完整的设备抽象**：内存管理、设备切换、流同步
 - ✅ **渐进式算子开发**：NPU 原生实现 + CPU Fallback 混合模式
@@ -43,18 +43,18 @@ CAS-NPU 是一个使用 PyTorch 的 `PrivateUse1` 机制实现的自定义设备
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Python API Layer                                               │
-│  cas_npu/__init__.py - 设备管理、后端注册                         │
+│  echo_npu/__init__.py - 设备管理、后端注册                         │
 ├─────────────────────────────────────────────────────────────────┤
 │  PyTorch Backend Layer (backend/)                               │
-│  ├─ cas_npu_ops.cpp        - 算子实现 (NPU原生 / CPU Fallback)   │
-│  ├─ cas_npu_allocator.cpp  - 设备内存分配器                      │
-│  ├─ cas_npu_guard.cpp      - DeviceGuard 实现                   │
-│  ├─ cas_npu_hooks.cpp      - PrivateUse1 Hooks                  │
-│  └─ cas_npu_module.cpp     - Python 绑定 (pybind11)             │
+│  ├─ echo_npu_ops.cpp        - 算子实现 (NPU原生 / CPU Fallback)   │
+│  ├─ echo_npu_allocator.cpp  - 设备内存分配器                      │
+│  ├─ echo_npu_guard.cpp      - DeviceGuard 实现                   │
+│  ├─ echo_npu_hooks.cpp      - PrivateUse1 Hooks                  │
+│  └─ echo_npu_module.cpp     - Python 绑定 (pybind11)             │
 ├─────────────────────────────────────────────────────────────────┤
-│  Runtime API Layer (runtime/cas_npu_runtime.h)                  │
-│  ├─ 内存管理：casNpuMalloc, casNpuFree, casNpuMemcpy            │
-│  └─ 计算算子：casNpuMatMul, casNpuAddTensor, ...                │
+│  Runtime API Layer (runtime/echo_npu_runtime.h)                  │
+│  ├─ 内存管理：echoNpuMalloc, echoNpuFree, echoNpuMemcpy            │
+│  └─ 计算算子：echoNpuMatMul, echoNpuAddTensor, ...                │
 ├─────────────────────────────────────────────────────────────────┤
 │  Hardware Implementation Layer                                   │
 │  ├─ runtime/cmodel/  - CPU 模拟实现（开发调试）                   │
@@ -68,22 +68,22 @@ CAS-NPU 是一个使用 PyTorch 的 `PrivateUse1` 机制实现的自定义设备
 ```
 npu_cas_extension/
 ├── backend/                          # PyTorch 后端集成层
-│   ├── cas_npu_allocator.h/cpp       # 设备内存分配器
-│   ├── cas_npu_guard.h/cpp           # DeviceGuard 实现
-│   ├── cas_npu_hooks.h/cpp           # PrivateUse1 Hooks
-│   ├── cas_npu_ops.cpp               # 算子实现（核心文件）
-│   ├── cas_npu_module.cpp            # Python 绑定
-│   └── cas_npu_custom_ops_example.cpp # 自定义算子示例
+│   ├── echo_npu_allocator.h/cpp       # 设备内存分配器
+│   ├── echo_npu_guard.h/cpp           # DeviceGuard 实现
+│   ├── echo_npu_hooks.h/cpp           # PrivateUse1 Hooks
+│   ├── echo_npu_ops.cpp               # 算子实现（核心文件）
+│   ├── echo_npu_module.cpp            # Python 绑定
+│   └── echo_npu_custom_ops_example.cpp # 自定义算子示例
 ├── runtime/                          # Runtime 层
-│   ├── cas_npu_runtime.h             # Runtime API 定义
-│   ├── cas_npu_debug.h               # 调试系统
+│   ├── echo_npu_runtime.h             # Runtime API 定义
+│   ├── echo_npu_debug.h               # 调试系统
 │   ├── cmodel/simulator.cpp          # C 模型模拟器
 │   └── fpga/simulator.cpp            # FPGA 实现
-├── cas_npu/                          # Python 包
+├── echo_npu/                          # Python 包
 │   ├── __init__.py                   # 包初始化 & 设备注册
 │   └── debug.py                      # Python 调试接口
 ├── test/                             # 测试文件
-│   ├── test_cas_npu.py               # 基础功能测试
+│   ├── test_echo_npu.py               # 基础功能测试
 │   ├── test_lenet.py                 # LeNet 网络测试
 │   ├── test_qwen0.5B.py              # Qwen 模型测试
 │   └── test_custom_ops.py            # 自定义算子测试
@@ -114,14 +114,14 @@ chmod +x build_and_test.sh
 python setup.py build_ext --inplace
 
 # 方法3：使用 FPGA 后端构建
-CAS_NPU_IMPL=fpga python setup.py build_ext --inplace
+ECHO_NPU_IMPL=fpga python setup.py build_ext --inplace
 ```
 
 ### 验证安装
 
 ```bash
 # 运行基础测试
-python test/test_cas_npu.py
+python test/test_echo_npu.py
 
 # 运行网络测试
 python test/test_lenet.py
@@ -131,14 +131,14 @@ python test/test_lenet.py
 
 ```python
 import torch
-import cas_npu  # 自动注册后端
+import echo_npu  # 自动注册后端
 
 # 检查设备
-print(f"CAS-NPU available: {torch.cas_npu.is_available()}")
-print(f"Device count: {torch.cas_npu.device_count()}")
+print(f"ECHO-NPU available: {torch.echo_npu.is_available()}")
+print(f"Device count: {torch.echo_npu.device_count()}")
 
 # 创建设备上的 Tensor
-device = torch.device("cas_npu:0")
+device = torch.device("echo_npu:0")
 a = torch.randn(3, 3, device=device)
 b = torch.randn(3, 3, device=device)
 
@@ -154,7 +154,7 @@ print(c.cpu())
 
 ## 🔧 添加算子
 
-CAS-NPU 支持两种算子实现方式，可根据开发阶段灵活选择：
+ECHO-NPU 支持两种算子实现方式，可根据开发阶段灵活选择：
 
 ### 方式一：NPU 原生实现（高性能）
 
@@ -162,11 +162,11 @@ CAS-NPU 支持两种算子实现方式，可根据开发阶段灵活选择：
 
 #### 步骤 1：在 Runtime 层声明 API
 
-在 `runtime/cas_npu_runtime.h` 中添加函数声明：
+在 `runtime/echo_npu_runtime.h` 中添加函数声明：
 
 ```cpp
 // 例：实现 rsqrt 算子
-CasNpuError casNpuRsqrt(
+EchoNpuError echoNpuRsqrt(
     float* output,
     const float* input,
     size_t num_elements);
@@ -177,37 +177,37 @@ CasNpuError casNpuRsqrt(
 在 `runtime/cmodel/simulator.cpp` 中实现：
 
 ```cpp
-CasNpuError casNpuRsqrt(
+EchoNpuError echoNpuRsqrt(
     float* output,
     const float* input,
     size_t num_elements) {
     for (size_t i = 0; i < num_elements; ++i) {
         output[i] = 1.0f / std::sqrt(input[i]);
     }
-    return CAS_NPU_SUCCESS;
+    return ECHO_NPU_SUCCESS;
 }
 ```
 
 #### 步骤 3：注册 PyTorch 算子
 
-在 `backend/cas_npu_ops.cpp` 中注册：
+在 `backend/echo_npu_ops.cpp` 中注册：
 
 ```cpp
-at::Tensor cas_npu_rsqrt(const at::Tensor& self) {
+at::Tensor echo_npu_rsqrt(const at::Tensor& self) {
     auto output = at::empty_like(self);
     
-    auto err = cas_npu::casNpuRsqrt(
+    auto err = echo_npu::echoNpuRsqrt(
         output.data_ptr<float>(),
         self.data_ptr<float>(),
         self.numel()
     );
-    TORCH_CHECK(err == cas_npu::CAS_NPU_SUCCESS, "NPU rsqrt failed");
+    TORCH_CHECK(err == echo_npu::ECHO_NPU_SUCCESS, "NPU rsqrt failed");
     
     return output;
 }
 
 TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
-    m.impl("rsqrt", &cas_npu_rsqrt);
+    m.impl("rsqrt", &echo_npu_rsqrt);
 }
 ```
 
@@ -221,7 +221,7 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
 #### 使用统一 cpu_fallback 函数
 
 ```cpp
-// backend/cas_npu_ops.cpp 中已实现通用 cpu_fallback
+// backend/echo_npu_ops.cpp 中已实现通用 cpu_fallback
 TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
     m.impl("rsqrt", &cpu_fallback<&at::native::rsqrt>);
     m.impl("pow.Tensor_Scalar", &cpu_fallback<&at::native::pow>);
@@ -232,7 +232,7 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
 #### 手动实现 Fallback（需要特殊处理时）
 
 ```cpp
-at::Tensor cas_npu_some_op(const at::Tensor& self) {
+at::Tensor echo_npu_some_op(const at::Tensor& self) {
     // 1. 拷贝到 CPU
     at::Tensor self_cpu = self.to(at::kCPU);
     
@@ -250,25 +250,25 @@ at::Tensor cas_npu_some_op(const at::Tensor& self) {
 
 ```cpp
 // 定义 Schema
-TORCH_LIBRARY(cas_npu, m) {
+TORCH_LIBRARY(echo_npu, m) {
     m.def("custom_quantize(Tensor input, float scale, int zero_point) -> Tensor");
 }
 
 // 实现算子
-at::Tensor cas_npu_custom_quantize(const at::Tensor& input, double scale, int64_t zero_point) {
+at::Tensor echo_npu_custom_quantize(const at::Tensor& input, double scale, int64_t zero_point) {
     // ... 实现
 }
 
 // 注册到设备
-TORCH_LIBRARY_IMPL(cas_npu, PrivateUse1, m) {
-    m.impl("custom_quantize", &cas_npu_custom_quantize);
+TORCH_LIBRARY_IMPL(echo_npu, PrivateUse1, m) {
+    m.impl("custom_quantize", &echo_npu_custom_quantize);
 }
 ```
 
 Python 调用：
 
 ```python
-output = torch.ops.cas_npu.custom_quantize(input_tensor, 0.1, 0)
+output = torch.ops.echo_npu.custom_quantize(input_tensor, 0.1, 0)
 ```
 
 ---
@@ -280,9 +280,9 @@ output = torch.ops.cas_npu.custom_quantize(input_tensor, 0.1, 0)
 ```python
 import torch
 import torch.nn as nn
-import cas_npu
+import echo_npu
 
-device = torch.device('cas_npu:0')
+device = torch.device('echo_npu:0')
 
 # 方法1：创建后移动
 model = MyModel()
@@ -306,7 +306,7 @@ with torch.no_grad():
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import cas_npu
+import echo_npu
 
 class LeNet(nn.Module):
     def __init__(self):
@@ -326,7 +326,7 @@ class LeNet(nn.Module):
         return self.fc3(x)
 
 # 运行推理
-device = torch.device('cas_npu:0')
+device = torch.device('echo_npu:0')
 model = LeNet().to(device)
 x = torch.randn(4, 1, 28, 28).to(device)
 
@@ -339,10 +339,10 @@ with torch.no_grad():
 
 ```python
 import torch
-import cas_npu
+import echo_npu
 from transformers import AutoModel, AutoTokenizer
 
-device = torch.device('cas_npu:0')
+device = torch.device('echo_npu:0')
 
 # 加载模型
 model_name = "Qwen/Qwen2.5-0.5B"
@@ -376,10 +376,10 @@ with torch.no_grad():
 
 ```bash
 # 启用调试打印
-CAS_NPU_DEBUG=1 python your_script.py
+ECHO_NPU_DEBUG=1 python your_script.py
 
 # 设置详细程度 (1-3)
-CAS_NPU_DEBUG_LEVEL=2 python your_script.py
+ECHO_NPU_DEBUG_LEVEL=2 python your_script.py
 ```
 
 | Level | 显示内容 |
@@ -391,7 +391,7 @@ CAS_NPU_DEBUG_LEVEL=2 python your_script.py
 ### Python API 控制
 
 ```python
-import cas_npu.debug as debug
+import echo_npu.debug as debug
 
 # 启用/禁用
 debug.enable(level=2)
@@ -435,9 +435,9 @@ with debug.debug_mode(level=3):
 
 | 算子 | Runtime API | 用途 |
 |-----|-------------|------|
-| `mm` | `casNpuMatMul` | Linear 层、投影 |
-| `bmm` | `casNpuBatchMatMul` | Attention 计算 |
-| `add.Tensor` | `casNpuAddTensor` | 残差连接 |
+| `mm` | `echoNpuMatMul` | Linear 层、投影 |
+| `bmm` | `echoNpuBatchMatMul` | Attention 计算 |
+| `add.Tensor` | `echoNpuAddTensor` | 残差连接 |
 
 ### CPU Fallback（待优化）
 
@@ -465,7 +465,7 @@ with debug.debug_mode(level=3):
 
 **问题**：当前仅支持推理（前向传播），不支持训练（反向传播）。
 
-**目标**：在 CAS-NPU 上实现 Qwen 0.5B 的 LoRA 微调，验证训练支持。
+**目标**：在 ECHO-NPU 上实现 Qwen 0.5B 的 LoRA 微调，验证训练支持。
 
 **需要实现的功能**：
 
@@ -495,8 +495,8 @@ with debug.debug_mode(level=3):
 ```
 当前实现（问题）：
 ┌─────────────────────────────────────────────────────────────┐
-│  casNpuMalloc() ──▶ CPU malloc() ──▶ 返回 CPU 虚拟地址       │
-│  casNpuMemcpy() ──▶ CPU memcpy() ──▶ 直接操作 CPU 内存       │
+│  echoNpuMalloc() ──▶ CPU malloc() ──▶ 返回 CPU 虚拟地址       │
+│  echoNpuMemcpy() ──▶ CPU memcpy() ──▶ 直接操作 CPU 内存       │
 └─────────────────────────────────────────────────────────────┘
 
 目标实现：
@@ -508,8 +508,8 @@ with debug.debug_mode(level=3):
 │  │               └─ ... (可配置布局)                    │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                           │                                 │
-│  casNpuMalloc() ──▶ 分配物理地址 ──▶ 返回 NPU 物理地址       │
-│  casNpuMemcpy() ──▶ 物理地址转换 ──▶ 操作模拟 RAM            │
+│  echoNpuMalloc() ──▶ 分配物理地址 ──▶ 返回 NPU 物理地址       │
+│  echoNpuMemcpy() ──▶ 物理地址转换 ──▶ 操作模拟 RAM            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -522,7 +522,7 @@ with debug.debug_mode(level=3):
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Runtime API Layer                                              │
-│  casNpuMatMul(), casNpuAddTensor(), ...                        │
+│  echoNpuMatMul(), echoNpuAddTensor(), ...                        │
 ├─────────────────────────────────────────────────────────────────┤
 │  RTL Model Backend (runtime/rtlmodel/)                          │
 │  ├─ verilator_wrapper.cpp    - Verilator 仿真控制               │
@@ -571,23 +571,23 @@ class AxiDriver {
 # CModel 后端（默认，快速开发调试）
 python setup.py build_ext --inplace
 # 或
-CAS_NPU_BACKEND=cmodel python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=cmodel python setup.py build_ext --inplace
 
 # RTL Model 后端（RTL 仿真验证）
-CAS_NPU_BACKEND=rtlmodel python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=rtlmodel python setup.py build_ext --inplace
 
 # FPGA 后端（硬件验证）
-CAS_NPU_BACKEND=fpga python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=fpga python setup.py build_ext --inplace
 
 # ASIC 后端（芯片驱动）
-CAS_NPU_BACKEND=asic python setup.py build_ext --inplace
+ECHO_NPU_BACKEND=asic python setup.py build_ext --inplace
 ```
 
 **setup.py 改进**：
 
 ```python
 # 读取后端选择
-backend = os.environ.get('CAS_NPU_BACKEND', 'cmodel')
+backend = os.environ.get('ECHO_NPU_BACKEND', 'cmodel')
 
 # 根据后端选择源文件
 backend_sources = {
@@ -601,18 +601,18 @@ backend_sources = {
 
 #### 5. Runtime 架构重构
 
-**问题**：当前 Runtime 层的抽象不够清晰，`cas_npu_runtime.h` 中的 API 声明与具体实现耦合过紧。
+**问题**：当前 Runtime 层的抽象不够清晰，`echo_npu_runtime.h` 中的 API 声明与具体实现耦合过紧。
 
 **目标架构**：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Runtime API Layer (runtime/cas_npu_runtime.h)                  │
+│  Runtime API Layer (runtime/echo_npu_runtime.h)                  │
 │  ├─ 统一接口定义（纯虚函数 / 函数指针表）                          │
 │  └─ 后端无关的通用逻辑                                           │
 ├─────────────────────────────────────────────────────────────────┤
 │  Backend Abstraction Layer (runtime/backend_interface.h)        │
-│  ├─ CasNpuBackend 抽象基类                                      │
+│  ├─ EchoNpuBackend 抽象基类                                      │
 │  └─ 运行时后端选择 & 动态加载                                     │
 ├─────────────────────────────────────────────────────────────────┤
 │  Concrete Implementations                                        │
@@ -634,7 +634,7 @@ backend_sources = {
 
 ```bash
 # 基础功能测试
-python test/test_cas_npu.py
+python test/test_echo_npu.py
 
 # LeNet 网络测试
 python test/test_lenet.py
@@ -646,7 +646,7 @@ python test/test_qwen0.5B.py
 python test/test_custom_ops.py
 
 # 带调试输出测试
-CAS_NPU_DEBUG_LEVEL=2 python test/test_lenet.py
+ECHO_NPU_DEBUG_LEVEL=2 python test/test_lenet.py
 ```
 
 ---

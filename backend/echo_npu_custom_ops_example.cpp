@@ -1,20 +1,20 @@
-// CAS-NPU 自定义算子示例
+// ECHO-NPU 自定义算子示例
 // 演示如何注册PyTorch中不存在的新算子 - 自定义量化算子
 
-#include "runtime/cas_npu_runtime.h"
+#include "runtime/echo_npu_runtime.h"
 #include <ATen/ATen.h>
 #include <c10/core/ScalarType.h>
 #include <torch/library.h>
 #include <vector>
 #include <cstdint>
 
-using namespace cas_npu;
+using namespace echo_npu;
 
 namespace {
 
-// ============ 步骤1: 定义算子的schema（在自定义命名空间 cas_npu 中）============
+// ============ 步骤1: 定义算子的schema（在自定义命名空间 echo_npu 中）============
 // 使用 TORCH_LIBRARY 宏定义新命名空间和新算子的schema
-TORCH_LIBRARY(cas_npu, m) {
+TORCH_LIBRARY(echo_npu, m) {
     // 定义自定义量化算子的schema
     // 参数说明：
     //   - Tensor input: 输入的float32 tensor
@@ -27,14 +27,14 @@ TORCH_LIBRARY(cas_npu, m) {
 
 // ============ 步骤2: 实现算子函数 ============
 // 实现自定义量化算子：将float32 tensor量化为int8 tensor
-at::Tensor cas_npu_custom_quantize(
+at::Tensor echo_npu_custom_quantize(
     const at::Tensor& input,
     double scale,
     int64_t zero_point) {
     
     // 参数检查
     TORCH_CHECK(input.device().is_privateuseone(), 
-                "Expected input tensor on CAS-NPU device");
+                "Expected input tensor on ECHO-NPU device");
     TORCH_CHECK(input.scalar_type() == at::kFloat,
                 "Input tensor must be float32");
     TORCH_CHECK(scale > 0.0, "Scale must be positive");
@@ -57,8 +57,8 @@ at::Tensor cas_npu_custom_quantize(
     const float* input_data = input.data_ptr<float>();
     size_t num_elements = input.numel();
     
-    // 调用CAS-NPU runtime执行量化操作
-    auto err = casNpuQuantize(
+    // 调用ECHO-NPU runtime执行量化操作
+    auto err = echoNpuQuantize(
         out_data,
         input_data,
         num_elements,
@@ -66,17 +66,17 @@ at::Tensor cas_npu_custom_quantize(
         static_cast<int8_t>(zero_point)
     );
     
-    TORCH_CHECK(err == CAS_NPU_SUCCESS,
-                "CAS-NPU quantize operation failed: ", casNpuGetErrorString(err));
+    TORCH_CHECK(err == ECHO_NPU_SUCCESS,
+                "ECHO-NPU quantize operation failed: ", echoNpuGetErrorString(err));
     
     return output;
 }
 
 // ============ 步骤3: 为PrivateUse1设备注册实现 ============
 // 使用 TORCH_LIBRARY_IMPL 为特定设备（PrivateUse1）注册算子实现
-TORCH_LIBRARY_IMPL(cas_npu, PrivateUse1, m) {
+TORCH_LIBRARY_IMPL(echo_npu, PrivateUse1, m) {
     // 将算子名称与实现函数绑定
-    m.impl("custom_quantize", &cas_npu_custom_quantize);
+    m.impl("custom_quantize", &echo_npu_custom_quantize);
 }
 
 } // anonymous namespace

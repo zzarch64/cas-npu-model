@@ -1,59 +1,59 @@
-// CAS-NPU Runtime Header - 模拟NPU runtime和驱动
+// ECHO-NPU Runtime Header - 模拟NPU runtime和驱动
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
 
-namespace cas_npu {
+namespace echo_npu {
 
 // 错误码定义
-enum CasNpuError {
-    CAS_NPU_SUCCESS = 0,
-    CAS_NPU_ERROR_INVALID_DEVICE = 1,
-    CAS_NPU_ERROR_OUT_OF_MEMORY = 2,
-    CAS_NPU_ERROR_INVALID_VALUE = 3,
-    CAS_NPU_ERROR_UNKNOWN = 999
+enum EchoNpuError {
+    ECHO_NPU_SUCCESS = 0,
+    ECHO_NPU_ERROR_INVALID_DEVICE = 1,
+    ECHO_NPU_ERROR_OUT_OF_MEMORY = 2,
+    ECHO_NPU_ERROR_INVALID_VALUE = 3,
+    ECHO_NPU_ERROR_UNKNOWN = 999
 };
 
 // 内存拷贝方向（类似 cudaMemcpyKind）
-enum CasNpuMemcpyKind {
-    CAS_NPU_MEMCPY_HOST_TO_HOST = 0,      // CPU -> CPU
-    CAS_NPU_MEMCPY_HOST_TO_DEVICE = 1,    // CPU -> Device (Host to NPU)
-    CAS_NPU_MEMCPY_DEVICE_TO_HOST = 2,    // Device -> CPU (NPU to Host)
-    CAS_NPU_MEMCPY_DEVICE_TO_DEVICE = 3,  // Device -> Device (NPU to NPU)
-    CAS_NPU_MEMCPY_DEFAULT = 4            // 自动检测方向
+enum EchoNpuMemcpyKind {
+    ECHO_NPU_MEMCPY_HOST_TO_HOST = 0,      // CPU -> CPU
+    ECHO_NPU_MEMCPY_HOST_TO_DEVICE = 1,    // CPU -> Device (Host to NPU)
+    ECHO_NPU_MEMCPY_DEVICE_TO_HOST = 2,    // Device -> CPU (NPU to Host)
+    ECHO_NPU_MEMCPY_DEVICE_TO_DEVICE = 3,  // Device -> Device (NPU to NPU)
+    ECHO_NPU_MEMCPY_DEFAULT = 4            // 自动检测方向
 };
 
 // 设备数量（模拟1个NPU设备）
-constexpr int CAS_NPU_DEVICE_COUNT = 1;
+constexpr int ECHO_NPU_DEVICE_COUNT = 1;
 
 // Runtime API - 模拟NPU驱动接口
 
 // 设备管理
-CasNpuError casNpuGetDeviceCount(int* count);
-CasNpuError casNpuSetDevice(int device);
-CasNpuError casNpuGetDevice(int* device);
+EchoNpuError echoNpuGetDeviceCount(int* count);
+EchoNpuError echoNpuSetDevice(int device);
+EchoNpuError echoNpuGetDevice(int* device);
 
 // 内存管理
-CasNpuError casNpuMalloc(void** ptr, size_t size);
-CasNpuError casNpuFree(void* ptr);
+EchoNpuError echoNpuMalloc(void** ptr, size_t size);
+EchoNpuError echoNpuFree(void* ptr);
 
 // 带方向的内存拷贝（类似 cudaMemcpy）
 // dst: 目标地址
 // src: 源地址
 // size: 拷贝字节数
 // kind: 拷贝方向
-CasNpuError casNpuMemcpy(void* dst, const void* src, size_t size, CasNpuMemcpyKind kind);
+EchoNpuError echoNpuMemcpy(void* dst, const void* src, size_t size, EchoNpuMemcpyKind kind);
 
-CasNpuError casNpuMemset(void* ptr, int value, size_t size);
+EchoNpuError echoNpuMemset(void* ptr, int value, size_t size);
 
 // 同步
-CasNpuError casNpuDeviceSynchronize();
+EchoNpuError echoNpuDeviceSynchronize();
 
 // 计算操作 - 模拟NPU运算
 
 // 加法运算
-CasNpuError casNpuAddTensor(
+EchoNpuError echoNpuAddTensor(
     float* output,
     const float* input1,
     const float* input2,
@@ -62,7 +62,7 @@ CasNpuError casNpuAddTensor(
 
 // 矩阵乘法: output = input1 @ input2
 // input1: [M, K], input2: [K, N], output: [M, N]
-CasNpuError casNpuMatMul(
+EchoNpuError echoNpuMatMul(
     float* output,
     const float* input1,
     const float* input2,
@@ -72,7 +72,7 @@ CasNpuError casNpuMatMul(
 
 // 批量矩阵乘法: output = input1 @ input2
 // input1: [B, M, K], input2: [B, K, N], output: [B, M, N]
-CasNpuError casNpuBatchMatMul(
+EchoNpuError echoNpuBatchMatMul(
     float* output,
     const float* input1,
     const float* input2,
@@ -90,7 +90,7 @@ CasNpuError casNpuBatchMatMul(
 // shape2: 第二个输入张量的形状数组
 // output_shape: 输出张量的形状数组
 // ndim: 张量的维度数
-CasNpuError casNpuCat(
+EchoNpuError echoNpuCat(
     float* output,
     const float* input1,
     const float* input2,
@@ -106,7 +106,7 @@ CasNpuError casNpuCat(
 // num_elements: 元素数量
 // scale: 量化缩放因子
 // zero_point: 量化零点
-CasNpuError casNpuQuantize(
+EchoNpuError echoNpuQuantize(
     int8_t* output,
     const float* input,
     size_t num_elements,
@@ -114,7 +114,7 @@ CasNpuError casNpuQuantize(
     int8_t zero_point);
 
 // 获取错误描述
-const char* casNpuGetErrorString(CasNpuError error);
+const char* echoNpuGetErrorString(EchoNpuError error);
 
-} // namespace cas_npu
+} // namespace echo_npu
 

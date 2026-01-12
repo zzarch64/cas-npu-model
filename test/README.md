@@ -1,6 +1,6 @@
-# CAS-NPU 测试套件
+# ECHO-NPU 测试套件
 
-本目录包含 CAS-NPU 扩展的完整测试套件，用于验证自定义设备的功能和正确性。
+本目录包含 ECHO-NPU 扩展的完整测试套件，用于验证自定义设备的功能和正确性。
 
 ## 📁 目录结构
 
@@ -19,7 +19,7 @@ test/
 │   └── memory/                # 内存和数据传输测试
 │       └── test_copy_from_detailed.py   # 详细拷贝测试
 ├── integration/               # 集成测试
-│   ├── test_cas_npu.py       # 基础功能测试
+│   ├── test_echo_npu.py       # 基础功能测试
 │   ├── test_concept.py       # 概念验证测试
 │   ├── test_custom_ops.py    # 自定义算子测试
 │   ├── model/                 # 模型层测试
@@ -101,7 +101,7 @@ python test/unit/memory/test_copy_from_detailed.py
 
 ```bash
 # 基础功能测试
-python test/integration/test_cas_npu.py
+python test/integration/test_echo_npu.py
 
 # 概念验证测试（无需编译）
 python test/integration/test_concept.py
@@ -146,7 +146,7 @@ python test/unit/test_basic_ops.py -vv
 python test/unit/test_basic_ops.py -q
 
 # 指定设备
-python test/unit/test_basic_ops.py --device cas_npu:0
+python test/unit/test_basic_ops.py --device echo_npu:0
 
 # 指定容差
 python test/unit/test_basic_ops.py --tolerance 1e-6
@@ -363,9 +363,9 @@ python test/integration/attention/test_attention_mask_detailed.py [-v] [-q] [--d
 
 ---
 
-#### `test_cas_npu.py` - 基础功能测试
+#### `test_echo_npu.py` - 基础功能测试
 
-**用途**: 测试 CAS-NPU 扩展的基础功能
+**用途**: 测试 ECHO-NPU 扩展的基础功能
 
 **测试内容**:
 1. 设备可用性检查
@@ -376,7 +376,7 @@ python test/integration/attention/test_attention_mask_detailed.py [-v] [-q] [--d
 
 **运行方式**:
 ```bash
-python test/integration/test_cas_npu.py
+python test/integration/test_echo_npu.py
 ```
 
 **前置条件**: 需要先编译 C++ 扩展
@@ -388,7 +388,7 @@ python test/integration/test_cas_npu.py
 **用途**: 纯 Python 实现的概念验证，无需编译 C++ 扩展
 
 **特点**:
-- 使用 NumPy 模拟 CAS-NPU 设备操作
+- 使用 NumPy 模拟 ECHO-NPU 设备操作
 - 验证 PrivateUse1 机制的设计正确性
 - 手动注册操作实现
 
@@ -486,7 +486,7 @@ python test/tools/test_asan.py [-v] [-q] [--device DEVICE] [--tolerance TOL]
 
 | 测试文件 | 设备注册 | 基础操作 | 梯度计算 | 神经网络 | 大模型 |
 |---------|---------|---------|---------|---------|--------|
-| `test_cas_npu.py` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `test_echo_npu.py` | ✅ | ✅ | ❌ | ❌ | ❌ |
 | `test_concept.py` | ✅ | ✅ | ❌ | ❌ | ❌ |
 | `test_basic_ops.py` | ✅ | ✅ | ✅ | ❌ | ❌ |
 | `test_gradient.py` | ✅ | ✅ | ✅ | ❌ | ❌ |

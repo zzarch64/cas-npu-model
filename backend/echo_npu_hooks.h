@@ -1,15 +1,15 @@
-// CAS-NPU Hooks Header
+// ECHO-NPU Hooks Header
 #pragma once
 
 #include <ATen/detail/PrivateUse1HooksInterface.h>
 
-namespace cas_npu {
+namespace echo_npu {
 
-// CAS-NPU Hooks实现
+// ECHO-NPU Hooks实现
 // 提供设备相关的钩子函数
-struct CasNpuHooksInterface : public at::PrivateUse1HooksInterface {
-    CasNpuHooksInterface() = default;
-    ~CasNpuHooksInterface() override = default;
+struct EchoNpuHooksInterface : public at::PrivateUse1HooksInterface {
+    EchoNpuHooksInterface() = default;
+    ~EchoNpuHooksInterface() override = default;
     
     // 初始化设备
     void init() const override {}
@@ -22,7 +22,7 @@ struct CasNpuHooksInterface : public at::PrivateUse1HooksInterface {
 };
 
 // 注册Hooks
-void registerCasNpuHooks();
+void registerEchoNpuHooks();
 
-} // namespace cas_npu
+} // namespace echo_npu
 
