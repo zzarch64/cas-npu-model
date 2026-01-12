@@ -356,6 +356,9 @@ at::Tensor cas_npu_empty_memory_format(
 }
 
 // empty_strided实现
+// 【关键修复】忽略传入的 stride，总是创建 contiguous tensor
+// 这是因为 CAS-NPU 后端不支持非 contiguous 的内存访问
+// 所有 memcpy 操作都假设数据是 contiguous 的
 at::Tensor cas_npu_empty_strided(
     c10::IntArrayRef size,
     c10::IntArrayRef stride,
@@ -375,8 +378,19 @@ at::Tensor cas_npu_empty_strided(
     constexpr c10::DispatchKeySet pu1_dks(c10::DispatchKey::PrivateUse1);
     auto allocator = at::GetAllocator(at::kPrivateUse1);
     
+    // 【关键修复】计算 contiguous 的 stride，忽略传入的 stride
+    // 这确保所有 device 上的 tensor 都是 contiguous 的
+    std::vector<int64_t> contiguous_stride(size.size());
+    if (!size.empty()) {
+        int64_t running_stride = 1;
+        for (int64_t i = size.size() - 1; i >= 0; --i) {
+            contiguous_stride[i] = running_stride;
+            running_stride *= size[i];
+        }
+    }
+    
     return at::detail::empty_strided_generic(
-        size, stride, allocator, pu1_dks, dtype);
+        size, contiguous_stride, allocator, pu1_dks, dtype);
 }
 
 // _copy_from实现 - 设备间数据拷贝 (关键函数!)
@@ -435,78 +449,102 @@ at::Tensor cas_npu_copy_from(
         return dst;
     }
     
-    // 对于非contiguous tensor，需要特殊处理
-    if (!self.is_contiguous()) {
-        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (source non-contiguous)");
-        auto self_contig = self.contiguous();
-        return cas_npu_copy_from(self_contig, dst, non_blocking);
-    }
+    // 【关键修复】对于非 contiguous tensor，必须特殊处理
+    // 直接 memcpy 会忽略 stride 信息，导致数据错误
     
-    if (!dst.is_contiguous()) {
-        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", " (dst non-contiguous)");
+    // 策略：
+    // 1. 先将 src 数据移到 CPU（如果不在的话），并确保是 contiguous
+    // 2. 创建一个 contiguous 的目标 tensor
+    // 3. 拷贝数据
+    // 4. 如果原 dst 非 contiguous，返回 contiguous 版本
+    
+    bool src_contiguous = self.is_contiguous();
+    bool dst_contiguous = dst.is_contiguous();
+    
+    // 如果任何一个非 contiguous，需要通过 CPU 处理
+    if (!src_contiguous || !dst_contiguous) {
+        CAS_NPU_DEBUG_OP(debug::OpType::CPU_FALLBACK, "_copy_from", 
+            " (non-contiguous: src=%d, dst=%d)", src_contiguous, dst_contiguous);
         
-        // 【关键修复 2】非 contiguous dst 的正确处理
-        // 需要先将数据拷贝到 contiguous 的临时 tensor，
-        // 然后通过 CPU 的 copy_ 来处理 stride
-        
+        // 两者都在 CPU 的情况，直接使用 PyTorch 的 copy_
         if (self.is_cpu() && dst.is_cpu()) {
-            // 两者都在 CPU，直接使用 PyTorch 的 copy_
-                dst.copy_(self);
-                return dst;
-            }
-        
-        // 将 self 移到 CPU
-        at::Tensor self_cpu;
-        if (self.device().is_privateuseone()) {
-            self_cpu = at::empty(self.sizes(), self.options().device(at::kCPU));
-        size_t nbytes = self.numel() * self.element_size();
-        if (nbytes > 0) {
-            auto err = casNpuMemcpy(
-                self_cpu.data_ptr(),
-                self.data_ptr(),
-                nbytes,
-                CAS_NPU_MEMCPY_DEVICE_TO_HOST
-            );
-                TORCH_CHECK(err == CAS_NPU_SUCCESS, "Device to CPU copy failed");
-            }
-        } else {
-            self_cpu = self;
-        }
-        
-        if (dst.is_cpu()) {
-            // dst 在 CPU，使用 copy_ 处理 stride
-            dst.copy_(self_cpu);
+            dst.copy_(self);
             return dst;
         }
         
-        // dst 在 device 上且非 contiguous
-        // 【关键修复】这种情况需要特殊处理
-        // 先将 dst 拷贝到 CPU，使用 copy_ 更新数据，再拷贝回去
-        at::Tensor dst_cpu = at::empty(dst.sizes(), dst.options().device(at::kCPU));
-        // 先拷贝原有数据（保留可能需要的部分）
-        size_t dst_nbytes = dst.numel() * dst.element_size();
-        if (dst_nbytes > 0) {
-            auto err = casNpuMemcpy(
-                dst_cpu.data_ptr(),
-                dst.data_ptr(),
-                dst_nbytes,
-                CAS_NPU_MEMCPY_DEVICE_TO_HOST
-            );
-            TORCH_CHECK(err == CAS_NPU_SUCCESS, "Device to CPU copy failed");
+        // 将 src 移到 CPU 并变成 contiguous
+        at::Tensor src_cpu_contig;
+        if (self.device().is_privateuseone()) {
+            // src 在 device 上，需要先拷贝到 CPU
+            if (src_contiguous) {
+                // src 是 contiguous 的，直接拷贝
+                src_cpu_contig = at::empty(self.sizes(), self.options().device(at::kCPU));
+                size_t nbytes = self.numel() * self.element_size();
+                if (nbytes > 0) {
+                    auto err = casNpuMemcpy(
+                        src_cpu_contig.data_ptr(),
+                        self.data_ptr(),
+                        nbytes,
+                        CAS_NPU_MEMCPY_DEVICE_TO_HOST
+                    );
+                    TORCH_CHECK(err == CAS_NPU_SUCCESS, "Device to CPU copy failed");
+                }
+            } else {
+                // src 非 contiguous，需要先在 device 上变 contiguous，再拷贝
+                auto self_contig = self.contiguous();
+                src_cpu_contig = at::empty(self_contig.sizes(), self_contig.options().device(at::kCPU));
+                size_t nbytes = self_contig.numel() * self_contig.element_size();
+                if (nbytes > 0) {
+                    auto err = casNpuMemcpy(
+                        src_cpu_contig.data_ptr(),
+                        self_contig.data_ptr(),
+                        nbytes,
+                        CAS_NPU_MEMCPY_DEVICE_TO_HOST
+                    );
+                    TORCH_CHECK(err == CAS_NPU_SUCCESS, "Device to CPU copy failed");
+                }
+            }
+        } else {
+            // src 在 CPU 上
+            if (src_contiguous) {
+                src_cpu_contig = self;
+            } else {
+                src_cpu_contig = self.contiguous();
+            }
         }
-        // 使用 CPU 的 copy_ 更新数据（会正确处理 stride）
-        dst_cpu.copy_(self_cpu);
-        // 将更新后的数据拷贝回 device
-        if (dst_nbytes > 0) {
+        
+        // 现在 src_cpu_contig 是 CPU 上的 contiguous tensor
+        
+        // dst 在 CPU 的情况
+        if (dst.is_cpu()) {
+            // 使用 PyTorch 的 copy_ 来处理 stride
+            dst.copy_(src_cpu_contig);
+            return dst;
+        }
+        
+        // dst 在 device 上
+        // 创建一个 contiguous 的 dst（无论原 dst 是否 contiguous）
+        at::Tensor dst_contig;
+        if (dst_contiguous) {
+            dst_contig = dst;
+        } else {
+            // 创建一个新的 contiguous tensor
+            dst_contig = at::empty(dst.sizes(), dst.options());
+        }
+        
+        // 将数据从 CPU 拷贝到 device
+        size_t nbytes = src_cpu_contig.numel() * src_cpu_contig.element_size();
+        if (nbytes > 0) {
             auto err = casNpuMemcpy(
-                dst.data_ptr(),
-                dst_cpu.data_ptr(),
-                dst_nbytes,
+                dst_contig.data_ptr(),
+                src_cpu_contig.data_ptr(),
+                nbytes,
                 CAS_NPU_MEMCPY_HOST_TO_DEVICE
             );
             TORCH_CHECK(err == CAS_NPU_SUCCESS, "Host to device copy failed");
-    }
-        return dst;
+        }
+        
+        return dst_contig;
     }
     
     // self 和 dst 都是 contiguous，可以直接 memcpy

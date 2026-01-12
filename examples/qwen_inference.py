@@ -193,7 +193,8 @@ def generate_text(
     print(f"  Attention mask shape: {attention_mask.shape}, dtype: {attention_mask.dtype}")
     print(f"  Attention mask (first 10): {attention_mask[0, :min(10, attention_mask.shape[1])].cpu().tolist()}")
     print(f"  Attention mask sum (should be > 0): {attention_mask.sum().item()}")
-    print(f"  Input tokens: {tokenizer.convert_ids_to_tokens(input_ids[0, :min(10, input_ids.shape[1])])}")
+    # 使用 decode 正确显示中文，而不是 convert_ids_to_tokens（会显示 byte-level BPE 编码）
+    print(f"  Decoded input: {tokenizer.decode(input_ids[0], skip_special_tokens=True)}")
     
     # 生成配置
     generation_config = GenerationConfig(
@@ -274,20 +275,17 @@ def generate_text(
     print(f"  Output shape: {outputs.shape}")
     print(f"  Input length: {input_ids.shape[1]}")
     print(f"  Output length: {outputs.shape[1]}")
-    print(f"  Full output IDs (first 20): {outputs[0, :min(20, outputs.shape[1])].cpu().tolist()}")
     
     # 解码输出
     # 只解码新生成的部分（去掉输入部分）
     generated_ids = outputs[0][input_ids.shape[1]:]
-    print(f"  Generated IDs (first 20): {generated_ids[:min(20, len(generated_ids))].cpu().tolist()}")
-    print(f"  Generated tokens: {tokenizer.convert_ids_to_tokens(generated_ids[:min(20, len(generated_ids))])}")
     
-    # 【重要】也解码完整输出，看看是否包含输入
+    # 使用 decode 正确显示中文
     full_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print(f"  Full output text: {full_text[:200]}...")
-    
     generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
-    print(f"  Generated text only: {generated_text[:200]}...")
+    
+    print(f"  Full output: {full_text[:200]}...")
+    print(f"  Generated only: {generated_text[:200]}...")
     
     return generated_text
 
