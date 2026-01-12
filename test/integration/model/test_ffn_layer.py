@@ -38,6 +38,9 @@ def test_ffn_operations(config: TestConfig) -> bool:
     device = torch.device(config.device)
     all_passed = True
     
+    # 设置固定随机种子，确保测试可重复
+    torch.manual_seed(42)
+    
     # 测试 linear layers (mm)
     if config.verbosity.value >= VerbosityLevel.VERBOSE.value:
         print("\n  Testing linear layers (mm)...")
