@@ -12,14 +12,29 @@ test/
 │   ├── test_basic_ops.py     # 基础操作测试（add_, copy_）
 │   ├── test_gradient.py       # 梯度计算测试
 │   ├── test_addmm.py         # addmm 操作测试
-│   └── test_linear.py         # Linear 层测试
+│   ├── test_linear.py         # Linear 层测试
+│   ├── operators/            # 算子精度测试
+│   │   ├── test_operator_accuracy.py    # 算子精度测试
+│   │   └── test_addmm_detailed.py      # 详细 addmm 测试
+│   └── memory/                # 内存和数据传输测试
+│       └── test_copy_from_detailed.py   # 详细拷贝测试
 ├── integration/               # 集成测试
 │   ├── test_cas_npu.py       # 基础功能测试
 │   ├── test_concept.py       # 概念验证测试
-│   └── test_custom_ops.py    # 自定义算子测试
+│   ├── test_custom_ops.py    # 自定义算子测试
+│   ├── model/                 # 模型层测试
+│   │   ├── test_layer_by_layer.py       # 逐层测试
+│   │   ├── test_ffn_layer.py            # FFN 层测试
+│   │   ├── test_ffn_step_by_step.py     # FFN 逐步测试
+│   │   └── test_cpu_vs_npu.py           # CPU vs NPU 对比
+│   └── attention/             # Attention 测试
+│       ├── test_attention_computation.py # Attention 计算测试
+│       ├── test_attention_mask.py       # Attention mask 测试
+│       └── test_attention_mask_detailed.py # 详细 attention mask 测试
 └── tools/                     # 测试工具
     ├── gradient_analyzer.py   # 梯度 NaN 分析工具
-    └── test_nan_diagnosis.py # NaN 诊断工具
+    ├── test_nan_diagnosis.py # NaN 诊断工具
+    └── test_asan.py           # AddressSanitizer 测试
 ```
 
 ## 🚀 快速开始
@@ -73,6 +88,13 @@ python test/unit/test_addmm.py
 
 # Linear 层测试
 python test/unit/test_linear.py
+
+# 算子精度测试
+python test/unit/operators/test_operator_accuracy.py
+python test/unit/operators/test_addmm_detailed.py
+
+# 内存拷贝测试
+python test/unit/memory/test_copy_from_detailed.py
 ```
 
 #### 运行集成测试
@@ -86,6 +108,17 @@ python test/integration/test_concept.py
 
 # 自定义算子测试
 python test/integration/test_custom_ops.py
+
+# 模型层测试
+python test/integration/model/test_layer_by_layer.py
+python test/integration/model/test_ffn_layer.py
+python test/integration/model/test_ffn_step_by_step.py
+python test/integration/model/test_cpu_vs_npu.py
+
+# Attention 测试
+python test/integration/attention/test_attention_computation.py
+python test/integration/attention/test_attention_mask.py
+python test/integration/attention/test_attention_mask_detailed.py
 ```
 
 #### 使用测试工具
@@ -96,6 +129,9 @@ python test/tools/gradient_analyzer.py
 
 # NaN 诊断
 python test/tools/test_nan_diagnosis.py
+
+# AddressSanitizer 测试
+python test/tools/test_asan.py
 ```
 
 ### 3. 测试参数
@@ -181,7 +217,151 @@ python test/unit/test_linear.py [-v] [-q] [--device DEVICE] [--tolerance TOL]
 
 ---
 
+#### `operators/test_operator_accuracy.py` - 算子精度测试
+
+**测试内容**:
+- 基础算子测试 (mm, bmm, add, addmm)
+- 模型第一层输出对比
+- 逐步检查每个 transformer layer
+
+**运行方式**:
+```bash
+python test/unit/operators/test_operator_accuracy.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH] [--num-layers N]
+```
+
+---
+
+#### `operators/test_addmm_detailed.py` - 详细 addmm 测试
+
+**测试内容**:
+- 基本 addmm 操作
+- 使用实际模型权重测试 (gate_proj, up_proj, down_proj)
+
+**运行方式**:
+```bash
+python test/unit/operators/test_addmm_detailed.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH]
+```
+
+---
+
+#### `memory/test_copy_from_detailed.py` - 详细拷贝测试
+
+**测试内容**:
+- 基本拷贝测试 (CPU->NPU, NPU->CPU, NPU->NPU)
+- 非 contiguous tensor 拷贝 (transpose, slice, view)
+- 3D tensor 拷贝
+- 模型数据传递测试
+
+**运行方式**:
+```bash
+python test/unit/memory/test_copy_from_detailed.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH]
+```
+
+---
+
 ### 集成测试 (test/integration/)
+
+#### `model/test_layer_by_layer.py` - 逐层测试
+
+**测试内容**:
+- Embedding 层对比
+- 逐层检查 transformer layers
+- 最终输出对比
+
+**运行方式**:
+```bash
+python test/integration/model/test_layer_by_layer.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH] [--num-layers N]
+```
+
+---
+
+#### `model/test_ffn_layer.py` - FFN 层测试
+
+**测试内容**:
+- Attention 输出对比
+- FFN 输出对比
+- Layer 输出对比
+- FFN 关键操作测试 (linear, SiLU)
+
+**运行方式**:
+```bash
+python test/integration/model/test_ffn_layer.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH]
+```
+
+---
+
+#### `model/test_ffn_step_by_step.py` - FFN 逐步测试
+
+**测试内容**:
+- Input layer norm
+- Gate projection
+- Up projection
+- SiLU activation
+- Multiply (SiLU(gate) * up)
+- Down projection
+- Complete FFN output
+
+**运行方式**:
+```bash
+python test/integration/model/test_ffn_step_by_step.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH]
+```
+
+---
+
+#### `model/test_cpu_vs_npu.py` - CPU vs NPU 对比
+
+**测试内容**:
+- Forward pass 对比
+- Generation 对比
+
+**运行方式**:
+```bash
+python test/integration/model/test_cpu_vs_npu.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH] [--max-new-tokens N]
+```
+
+---
+
+#### `attention/test_attention_computation.py` - Attention 计算测试
+
+**测试内容**:
+- Attention 输入输出对比
+- Q @ K^T (bmm) 测试
+- Softmax 测试
+- Attention @ V (bmm) 测试
+
+**运行方式**:
+```bash
+python test/integration/attention/test_attention_computation.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH]
+```
+
+---
+
+#### `attention/test_attention_mask.py` - Attention mask 测试
+
+**测试内容**:
+- Forward pass 中 attention_mask 的使用
+- Generation 中 attention_mask 的使用
+- masked_fill_ 操作测试
+
+**运行方式**:
+```bash
+python test/integration/attention/test_attention_mask.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH]
+```
+
+---
+
+#### `attention/test_attention_mask_detailed.py` - 详细 attention mask 测试
+
+**测试内容**:
+- attention_mask 对输出的影响
+- Hook masked_fill_ 调用
+
+**运行方式**:
+```bash
+python test/integration/attention/test_attention_mask_detailed.py [-v] [-q] [--device DEVICE] [--tolerance TOL] [--model-path PATH]
+```
+
+---
 
 #### `test_cas_npu.py` - 基础功能测试
 
@@ -261,6 +441,23 @@ python test/tools/gradient_analyzer.py [-v] [-q] [--device DEVICE]
 **运行方式**:
 ```bash
 python test/tools/test_nan_diagnosis.py
+```
+
+---
+
+#### `test_asan.py` - AddressSanitizer 测试
+
+**用途**: 测试 masked_fill_ 相关的操作，避免加载完整模型
+
+**测试内容**:
+- 简单的 masked_fill_
+- Attention mask 处理
+- 多次调用 masked_fill_
+- 不同大小的 tensor
+
+**运行方式**:
+```bash
+python test/tools/test_asan.py [-v] [-q] [--device DEVICE] [--tolerance TOL]
 ```
 
 ---

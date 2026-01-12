@@ -32,14 +32,25 @@ class VerbosityLevel(Enum):
 
 
 class TestConfig:
-    """测试配置类"""
+    """测试配置类
+    
+    容差说明:
+    - tolerance: 基础算子容差 (默认 1e-5)
+    - layer_tolerance: Transformer 层容差 (默认 1e-3，允许累积误差)
+    - model_tolerance: 模型最终输出容差 (默认 1e-4)
+    - relative_tolerance: 相对误差阈值 (默认 1%，用于辅助判断)
+    """
     def __init__(self):
         self.verbosity = VerbosityLevel.NORMAL
         self.device = 'cas_npu:0'
         self.check_nan = True
         self.check_inf = True
         self.check_gradient = True
-        self.tolerance = 1e-5
+        # 容差配置
+        self.tolerance = 1e-5           # 基础算子容差
+        self.layer_tolerance = 1e-3      # Transformer 层容差
+        self.model_tolerance = 1e-4      # 模型输出容差
+        self.relative_tolerance = 0.01   # 相对误差阈值 (1%)
         self.show_stats = True
         self.show_shape = True
         self.show_device = True
@@ -157,21 +168,13 @@ def check_tensor(
         if has_nan or has_inf:
             print(f"✗ {name}: NaN={has_nan}, Inf={has_inf}")
     elif config.verbosity == VerbosityLevel.NORMAL:
-        status = "✗ NaN/Inf" if (has_nan or has_inf) else "✓ OK"
-        info_parts = []
-        if config.show_shape:
-            info_parts.append(f"shape={result['shape']}")
-        if config.show_device:
-            info_parts.append(f"device={result['device']}")
-        info_str = ", ".join(info_parts) if info_parts else ""
-        print(f"  {name}: {status}" + (f", {info_str}" if info_str else ""))
-        
-        if has_nan:
-            print(f"    NaN: {result['nan_count']}/{result['total_count']} ({result['nan_count']/result['total_count']*100:.2f}%)")
-        if has_inf:
-            print(f"    Inf: {result['inf_count']}/{result['total_count']} ({result['inf_count']/result['total_count']*100:.2f}%)")
-        if not has_nan and not has_inf and config.show_stats:
-            print(f"    min={result['stats']['min']:.6f}, max={result['stats']['max']:.6f}, mean={result['stats']['mean']:.6f}")
+        # NORMAL 级别只显示关键信息，不显示详细统计
+        status = "✗ NaN/Inf" if (has_nan or has_inf) else "✓"
+        if has_nan or has_inf:
+            print(f"  {name}: {status} (NaN: {result['nan_count']}, Inf: {result['inf_count']})")
+        else:
+            # 成功时只显示状态，不显示详细信息
+            pass  # 不打印，减少输出
     else:  # VERBOSE or DEBUG
         print(f"\n=== Checking {name} ===")
         print(f"  Shape: {result['shape']}")
@@ -256,9 +259,12 @@ def verify_tensor_match(
     
     if config.verbosity.value >= VerbosityLevel.NORMAL.value:
         if result['matched']:
-            print(f"  ✓ {name}: Matches expected (max_diff={result['max_diff']:.6f})")
+            # NORMAL 级别成功时不打印，减少输出
+            if config.verbosity.value >= VerbosityLevel.VERBOSE.value:
+                print(f"  ✓ {name}: Matches expected (max_diff={result['max_diff']:.6f})")
         else:
-            print(f"  ✗ {name}: Doesn't match (max_diff={result['max_diff']:.6f}, tolerance={tolerance})")
+            # 失败时总是打印
+            print(f"  ✗ {name}: max_diff={result['max_diff']:.6f} > tolerance={tolerance}")
     
     return result['matched'], result
 
@@ -323,9 +329,14 @@ def print_section(title: str, config: Optional[TestConfig] = None):
         config = TestConfig()
     
     if config.verbosity.value >= VerbosityLevel.NORMAL.value:
-        print("\n" + "=" * 80)
-        print(title)
-        print("=" * 80)
+        # 只在 VERBOSE 或更高级别显示完整分隔线
+        if config.verbosity.value >= VerbosityLevel.VERBOSE.value:
+            print("\n" + "=" * 80)
+            print(title)
+            print("=" * 80)
+        else:
+            # NORMAL 级别使用更紧凑的格式
+            print(f"\n[{title}]")
 
 
 def print_step(step_name: str, config: Optional[TestConfig] = None):
@@ -333,7 +344,8 @@ def print_step(step_name: str, config: Optional[TestConfig] = None):
     if config is None:
         config = TestConfig()
     
-    if config.verbosity.value >= VerbosityLevel.NORMAL.value:
+    # 只在 VERBOSE 或更高级别显示步骤标题
+    if config.verbosity.value >= VerbosityLevel.VERBOSE.value:
         print(f"\n[{step_name}]")
 
 

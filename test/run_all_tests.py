@@ -147,16 +147,26 @@ Examples:
         'tools': []
     }
     
-    # 运行单元测试
+    # 运行单元测试（递归查找子目录）
     if run_unit:
         print_section("Unit Tests", "-")
-        unit_tests = sorted(UNIT_DIR.glob("test_*.py"))
+        unit_tests = []
+        # 查找直接子目录中的测试文件
+        for test_file in sorted(UNIT_DIR.glob("test_*.py")):
+            unit_tests.append(test_file)
+        # 查找子目录中的测试文件
+        for subdir in UNIT_DIR.iterdir():
+            if subdir.is_dir():
+                for test_file in sorted(subdir.glob("test_*.py")):
+                    unit_tests.append(test_file)
         
         if not unit_tests:
             print("  No unit tests found")
         else:
             for test_file in unit_tests:
-                test_name = test_file.stem
+                # 使用相对路径作为测试名称
+                rel_path = test_file.relative_to(UNIT_DIR)
+                test_name = str(rel_path).replace(os.sep, "/").replace(".py", "")
                 if not quiet:
                     print(f"\nRunning {test_name}...")
                 
@@ -171,16 +181,26 @@ Examples:
                     # 在安静模式下，只显示失败的测试
                     print_result(test_name, passed, verbose)
     
-    # 运行集成测试
+    # 运行集成测试（递归查找子目录）
     if run_integration:
         print_section("Integration Tests", "-")
-        integration_tests = sorted(INTEGRATION_DIR.glob("test_*.py"))
+        integration_tests = []
+        # 查找直接子目录中的测试文件
+        for test_file in sorted(INTEGRATION_DIR.glob("test_*.py")):
+            integration_tests.append(test_file)
+        # 查找子目录中的测试文件
+        for subdir in INTEGRATION_DIR.iterdir():
+            if subdir.is_dir():
+                for test_file in sorted(subdir.glob("test_*.py")):
+                    integration_tests.append(test_file)
         
         if not integration_tests:
             print("  No integration tests found")
         else:
             for test_file in integration_tests:
-                test_name = test_file.stem
+                # 使用相对路径作为测试名称
+                rel_path = test_file.relative_to(INTEGRATION_DIR)
+                test_name = str(rel_path).replace(os.sep, "/").replace(".py", "")
                 if not quiet:
                     print(f"\nRunning {test_name}...")
                 
