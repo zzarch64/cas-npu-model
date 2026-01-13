@@ -9,7 +9,7 @@
 
 **基于 PyTorch PrivateUse1 机制实现的自定义 NPU 设备扩展**
 
-[快速开始](#快速开始) • [添加算子](#添加算子) • [运行网络](#运行网络) • [调试工具](#调试工具) • [开发文档](DEVLOG.md)
+[快速开始](#快速开始) • [添加算子](#添加算子) • [运行网络](#运行网络) • [调试工具](#调试工具) • [开发文档](doc/README.md)
 
 </div>
 
@@ -89,7 +89,11 @@ npu_cas_extension/
 │   └── test_custom_ops.py            # 自定义算子测试
 ├── setup.py                          # 构建脚本
 ├── build_and_test.sh                 # 一键构建测试脚本
-├── DEVLOG.md                         # 开发日志（详细设计文档）
+├── doc/                              # 文档目录
+│   ├── README.md                     # 文档索引
+│   ├── DEVLOG.md                     # 开发日志（详细设计文档）
+│   ├── debugging.md                  # 调试指南
+│   └── issues/                       # 问题分析文档
 └── README.md                         # 本文档
 ```
 
@@ -453,7 +457,7 @@ with debug.debug_mode(level=3):
 
 `view`, `reshape`, `transpose`, `permute`, `unsqueeze`, `squeeze`, `expand`, `slice`, `select`, `as_strided`, `t`, `detach`
 
-> 详细开发计划请参考 [DEVLOG.md](DEVLOG.md)
+> 详细开发计划请参考 [doc/DEVLOG.md](doc/DEVLOG.md)
 
 ---
 

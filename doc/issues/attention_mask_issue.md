@@ -1,4 +1,4 @@
-# Attention Mask 问题分析报告
+# Attention Mask 问题分析
 
 ## 问题描述
 
@@ -8,7 +8,7 @@
 
 ### 1. Attention Mask 传递和扩展
 - ✅ `attention_mask` 被正确传递到 `model.generate()`
-- ✅ 在生成过程中，`attention_mask` 被正确扩展（从 3 → 4 → 5...）
+- ✅ 在生成过程中，`attention_mask` 被正确扩展
 - ✅ Hook 显示模型 forward 方法接收到了 `attention_mask`
 
 ### 2. Attention Mask 对输出的影响
@@ -16,25 +16,19 @@
 - ⚠️ 但在生成过程中，有/无 `attention_mask` 的生成结果**完全相同**
 
 ### 3. CPU vs ECHO-NPU 对比
-- ✅ 在 CPU 上，模型生成与输入相关的内容："讲个笑话吧。当然可以！这是一个经典的笑话：为什么"
-- ❌ 在 ECHO-NPU 上，模型生成与输入无关的内容：",在100以内,同时是2"
+- ✅ 在 CPU 上，模型生成与输入相关的内容
+- ❌ 在 ECHO-NPU 上，模型生成与输入无关的内容
 - ❌ CPU 和 ECHO-NPU 上的 forward pass 输出 logits 差异显著（最大差异 6.19）
 
 ## 根本原因分析
 
-### 问题定位
-问题不在 `attention_mask` 本身，而在 **ECHO-NPU 后端的实现**。CPU 和 ECHO-NPU 上的模型输出差异表明：
-
-1. **算子实现可能有误**：某些关键算子（如 `mm`、`bmm`、`addmm`）的实现可能有问题
-2. **数据拷贝问题**：在 `_copy_from` 中可能存在数据损坏或类型转换错误
-3. **内存对齐问题**：虽然修复了 `malloc`，但可能还有其他内存相关问题
+问题不在 `attention_mask` 本身，而在 **ECHO-NPU 后端的实现**。
 
 ### 关键发现
 
 1. **`masked_fill_` 未被调用**：
    - Hook 显示 `masked_fill_` 在 forward pass 中未被调用
    - 这可能意味着模型使用了其他方式处理 `attention_mask`（如直接乘法）
-   - 或者 `masked_fill_` 在 C++ 层面调用，Python hook 无法捕获
 
 2. **Forward pass 输出差异**：
    - CPU 和 ECHO-NPU 上的 logits 差异显著
@@ -73,10 +67,6 @@
    - 在关键算子中添加调试输出，比较 CPU 和 ECHO-NPU 上的中间结果
    - 定位具体哪个算子导致输出差异
 
-4. **检查内存管理**：
-   - 虽然修复了 `malloc`，但可能还有其他内存相关问题
-   - 使用 AddressSanitizer 或 Valgrind 进一步检查
-
 ## 当前状态
 
 - ✅ `attention_mask` 被正确传递和扩展
@@ -84,9 +74,7 @@
 - ❌ 模型在 ECHO-NPU 上的输出与 CPU 不一致
 - ❌ 生成的内容与输入无关
 
-## 下一步行动
+---
 
-1. 创建详细的算子测试，定位具体哪个算子导致问题
-2. 检查 `mm`、`bmm`、`addmm` 的实现
-3. 验证 `_copy_from` 在各种情况下的正确性
-4. 添加调试输出来追踪问题
+**创建日期**：2026-01-10  
+**状态**：调查中
