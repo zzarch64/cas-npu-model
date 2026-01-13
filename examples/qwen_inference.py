@@ -13,6 +13,7 @@ import os
 import argparse
 import random
 import torch
+import threading
 from typing import Optional, List
 
 # 添加扩展路径
@@ -48,7 +49,7 @@ print("✓ Patched masked_fill_ for ECHO-NPU compatibility")
 
 # 检查 transformers 是否安装
 try:
-    from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, TextIteratorStreamer
     print("✓ transformers library found")
 except ImportError:
     print("✗ transformers library not found")
@@ -172,7 +173,8 @@ def generate_text(
     top_k: int = 50,
     do_sample: bool = True,
     repetition_penalty: float = 1.1,
-    show_progress: bool = True
+    show_progress: bool = True,
+    stream: bool = False
 ):
     """生成文本"""
     # 编码输入，显式创建 attention_mask
@@ -210,9 +212,65 @@ def generate_text(
     )
     
     # 生成文本
-    if show_progress:
+    if show_progress and not stream:
         print("Generating (this may take a while)...", flush=True)
     
+    # 如果启用流式输出
+    if stream:
+        # 创建流式输出器
+        streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+        
+        # 【重要】Hook 模型的 forward 方法，验证 attention_mask 的使用
+        original_forward = model.forward
+        forward_call_count = [0]
+        attention_mask_used = [False]
+        
+        def hooked_forward(*args, **kwargs):
+            forward_call_count[0] += 1
+            if 'attention_mask' in kwargs and kwargs['attention_mask'] is not None:
+                attention_mask_used[0] = True
+            return original_forward(*args, **kwargs)
+        
+        model.forward = hooked_forward
+        
+        # 准备生成参数
+        generate_kwargs = {
+            "input_ids": input_ids,
+            "generation_config": generation_config,
+            "streamer": streamer,
+        }
+        if attention_mask is not None:
+            generate_kwargs["attention_mask"] = attention_mask
+        
+        # 在单独线程中运行生成（确保在 no_grad 上下文中）
+        def generate_with_no_grad():
+            with torch.no_grad():
+                model.generate(**generate_kwargs)
+        
+        generation_thread = threading.Thread(target=generate_with_no_grad)
+        generation_thread.start()
+        
+        # 流式输出生成的文本
+        generated_text = ""
+        for new_text in streamer:
+            generated_text += new_text
+            print(new_text, end="", flush=True)
+        
+        generation_thread.join()
+        
+        # 恢复原始 forward
+        model.forward = original_forward
+        
+        print()  # 换行
+        
+        # 【调试信息】打印输出统计信息
+        print(f"\n[DEBUG] Output information:")
+        print(f"  Input length: {input_ids.shape[1]}")
+        print(f"  Generated text length: {len(generated_text)}")
+        
+        return generated_text
+    
+    # 非流式输出（原有逻辑）
     # 【重要】Hook 模型的 forward 方法，验证 attention_mask 的使用
     original_forward = model.forward
     forward_call_count = [0]
@@ -290,7 +348,7 @@ def generate_text(
     return generated_text
 
 
-def interactive_mode(model, tokenizer, device: str = 'echo_npu:0', **generation_kwargs):
+def interactive_mode(model, tokenizer, device: str = 'echo_npu:0', stream: bool = True, **generation_kwargs):
     """交互式对话模式"""
     print("\n" + "=" * 60)
     print("Interactive Mode")
@@ -321,16 +379,19 @@ def interactive_mode(model, tokenizer, device: str = 'echo_npu:0', **generation_
             
             print("Assistant: ", end="", flush=True)
             
-            # 生成回复
+            # 生成回复（使用流式输出）
             response = generate_text(
                 model, 
                 tokenizer, 
                 prompt, 
                 device=device,
+                stream=stream,
                 **generation_kwargs
             )
             
-            print(response)
+            # 如果非流式输出，需要打印响应
+            if not stream:
+                print(response)
             
             # 更新对话历史（限制长度以避免过长）
             conversation_history.append(f"User: {user_input}")
@@ -349,7 +410,7 @@ def interactive_mode(model, tokenizer, device: str = 'echo_npu:0', **generation_
             traceback.print_exc()
 
 
-def batch_inference(model, tokenizer, prompts: List[str], device: str = 'echo_npu:0', **generation_kwargs):
+def batch_inference(model, tokenizer, prompts: List[str], device: str = 'echo_npu:0', stream: bool = True, **generation_kwargs):
     """批量推理模式"""
     print("\n" + "=" * 60)
     print("Batch Inference")
@@ -360,6 +421,7 @@ def batch_inference(model, tokenizer, prompts: List[str], device: str = 'echo_np
     for i, prompt in enumerate(prompts, 1):
         print(f"\n[{i}/{len(prompts)}] Prompt: {prompt}")
         print("-" * 60)
+        print("Response: ", end="", flush=True)
         
         try:
             response = generate_text(
@@ -367,17 +429,23 @@ def batch_inference(model, tokenizer, prompts: List[str], device: str = 'echo_np
                 tokenizer, 
                 prompt, 
                 device=device,
+                stream=stream,
                 **generation_kwargs
             )
             
-            print(f"Response: {response}")
+            # 如果非流式输出，需要打印响应
+            if not stream:
+                print(response)
+            else:
+                print()  # 流式输出后换行
+            
             results.append({
                 'prompt': prompt,
                 'response': response
             })
         
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"\nError: {e}")
             results.append({
                 'prompt': prompt,
                 'response': f"Error: {e}"
@@ -434,6 +502,10 @@ Examples:
                         help='Disable sampling (use greedy decoding)')
     parser.add_argument('--repetition-penalty', type=float, default=1.1,
                         help='Repetition penalty (default: 1.1)')
+    parser.add_argument('--stream', action='store_true', default=True,
+                        help='Enable streaming output (default: True)')
+    parser.add_argument('--no-stream', dest='stream', action='store_false',
+                        help='Disable streaming output')
     
     args = parser.parse_args()
     
@@ -488,7 +560,7 @@ Examples:
     try:
         if args.interactive:
             # 交互式模式
-            interactive_mode(model, tokenizer, device=str(device), **generation_kwargs)
+            interactive_mode(model, tokenizer, device=str(device), stream=args.stream, **generation_kwargs)
         elif args.prompt:
             # 单次推理
             print("\n" + "=" * 60)
@@ -496,16 +568,22 @@ Examples:
             print("=" * 60)
             print(f"Prompt: {args.prompt}")
             print("-" * 60)
+            print("Response: ", end="", flush=True)
             
             response = generate_text(
                 model, 
                 tokenizer, 
                 args.prompt, 
                 device=str(device),
+                stream=args.stream,
                 **generation_kwargs
             )
             
-            print(f"Response: {response}")
+            # 如果非流式输出，需要打印响应
+            if not args.stream:
+                print(response)
+            else:
+                print()  # 流式输出后换行
         else:
             # 默认：使用示例提示
             example_prompts = [
@@ -514,7 +592,7 @@ Examples:
                 "Tell me a joke.",
             ]
             
-            batch_inference(model, tokenizer, example_prompts, device=str(device), **generation_kwargs)
+            batch_inference(model, tokenizer, example_prompts, device=str(device), stream=args.stream, **generation_kwargs)
     
     except Exception as e:
         print(f"\n✗ Inference failed: {e}")
